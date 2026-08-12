@@ -1,9 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Markdown } from '@/components/Markdown';
 import { useStudio } from '@/components/studio/StudioContext';
 import { apiJson } from '@/lib/client';
+import { diffWords } from '@/lib/diff';
+import { markdownToDoc } from '@/lib/markdown';
+import { docToPlainText } from '@/lib/tiptap';
 import { insertAfterRange, replaceRange } from './editor-utils';
 import type { EditorSelection, Turn } from '@/types';
 
@@ -65,6 +68,24 @@ export function AskPopover({
   const answer = latest?.content ?? '';
 
   const canApply = Boolean(editor) && !state.pending && Boolean(answer.trim());
+
+  const [showDiff, setShowDiff] = useState(false);
+
+  /**
+   * What Replace would actually do to the highlighted text.
+   *
+   * Compared as plain text, because the answer is Markdown and the selection
+   * isn't — diffing `**tighter**` against `tighter` would report a change that
+   * only exists in the syntax.
+   */
+  const diff = useMemo(() => {
+    if (state.pending || !answer.trim()) return null;
+
+    // Routed through the same parse Replace uses, so the diff describes what
+    // would actually land rather than a separate reading of the text.
+    const plain = docToPlainText({ type: 'doc', content: markdownToDoc(answer) });
+    return diffWords(state.selection.text, plain || answer);
+  }, [answer, state.pending, state.selection.text]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
@@ -143,6 +164,37 @@ export function AskPopover({
         ) : null}
         <div ref={bottomRef} />
       </div>
+
+      {diff && !diff.unchanged ? (
+        <div className="border-t border-[var(--border)]">
+          <button
+            type="button"
+            onClick={() => setShowDiff((value) => !value)}
+            className="flex w-full items-center justify-between px-3 py-1.5 text-[11px] text-[var(--text-faint)] transition-colors hover:text-[var(--text)]"
+          >
+            <span>
+              {showDiff ? 'Hide changes' : 'Show changes'} ·{' '}
+              <span className="text-[var(--ins)]">+{diff.added}</span>{' '}
+              <span className="text-[var(--del)]">−{diff.removed}</span>
+            </span>
+            <span className="text-[9px]">{showDiff ? '▴' : '▾'}</span>
+          </button>
+
+          {showDiff ? (
+            <p className="studio-diff max-h-40 overflow-y-auto px-3 pb-2 text-xs leading-relaxed">
+              {diff.parts.map((part, index) =>
+                part.op === 'keep' ? (
+                  <span key={index}>{part.text}</span>
+                ) : part.op === 'insert' ? (
+                  <ins key={index}>{part.text}</ins>
+                ) : (
+                  <del key={index}>{part.text}</del>
+                )
+              )}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="border-t border-[var(--border)] p-2">
         <textarea

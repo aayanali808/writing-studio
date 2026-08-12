@@ -15,6 +15,11 @@
   --accent: #c8956d;
   --accent-soft: rgba(200, 149, 109, 0.14);
   --danger: #d97066;
+  /* Rewrite diffs. Muted enough to read a whole paragraph through. */
+  --ins: #7fb07f;
+  --ins-soft: rgba(127, 176, 127, 0.16);
+  --del: #c98080;
+  --del-soft: rgba(201, 128, 128, 0.14);
 }
 
 html,
@@ -192,6 +197,32 @@ body {
 .studio-prose .ProseMirror .selection-preserved {
   background: var(--accent-soft);
   border-radius: 2px;
+}
+
+/* --- Rewrite diffs -------------------------------------------------------- */
+
+/*
+ * Shown in the ask popover before a rewrite is applied. Deletions keep their
+ * strikethrough so the two are still distinguishable without colour.
+ */
+
+.studio-diff {
+  white-space: pre-wrap;
+}
+
+.studio-diff ins {
+  background: var(--ins-soft);
+  color: var(--ins);
+  text-decoration: none;
+  border-radius: 2px;
+  padding: 0 0.1em;
+}
+
+.studio-diff del {
+  background: var(--del-soft);
+  color: var(--del);
+  border-radius: 2px;
+  padding: 0 0.1em;
 }
 
 /* --- Rendered Markdown --------------------------------------------------- */
