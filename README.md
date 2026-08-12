@@ -31,7 +31,20 @@ in the UI awaits `flushSave()` first.
 
 Next.js 16 (App Router) · TypeScript · Tailwind · TipTap · dockview · Postgres
 (`pg`) · Auth.js (single hardcoded Credentials user) · Anthropic API
-(`claude-opus-5`, including Claude's server-side web search tool)
+(`claude-sonnet-5`, including Claude's server-side web search tool)
+
+### Model and cost
+
+Everything runs on Claude Sonnet 5, set in one place — `MODEL` in
+`src/lib/anthropic.ts`. At roughly 100 calls a month against an ~8K-token
+Context Bundle that works out to about **$3.40/month** ($2/$10 per MTok);
+the same workload on Opus 5 is about $8.50. Point `MODEL` at `claude-opus-5`
+if a particular piece justifies it — nothing else needs to change.
+
+Per-task effort lives next to it in `EFFORT`. Sonnet 5 honours effort more
+strictly than Opus 5 at the low end, so the highlight-to-ask route runs at
+`medium` rather than `low`: a mechanical edit is fine at `low`, but "improve
+this passage" under-thinks there. Drop it if you'd rather have faster popovers.
 
 ## Setup
 
@@ -68,10 +81,10 @@ those three `AUTH_*` variables.
 
 **Function timeouts.** The AI routes set `maxDuration = 60`, which is the
 ceiling on Vercel's Hobby plan. The research agent is the one that can approach
-it — it runs several web searches per request at `effort: 'high'`. On Pro you
+it — it runs several web searches per request at `EFFORT.RESEARCH` (`high`). On Pro you
 can raise `maxDuration` to 300 in
 `src/app/api/documents/[id]/research/route.ts`; on Hobby, if searches get cut
-off, drop that route's `effort` to `'medium'` or lower `WEB_SEARCH_TOOL.max_uses`
+off, drop `EFFORT.RESEARCH` to `'medium'` or lower `WEB_SEARCH_TOOL.max_uses`
 in `src/lib/anthropic.ts`.
 
 ## Adding a source provider

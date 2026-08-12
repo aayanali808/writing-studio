@@ -1,5 +1,5 @@
 import { requireSession } from '@/auth';
-import { MODEL, getAnthropic } from '@/lib/anthropic';
+import { EFFORT, MODEL, getAnthropic } from '@/lib/anthropic';
 import { contextSystemPrompt } from '@/lib/context-bundle';
 import { query } from '@/lib/db';
 import type { ChatMessage } from '@/types';
@@ -84,7 +84,7 @@ export async function POST(request: Request, { params }: RouteContext) {
           model: MODEL,
           max_tokens: 32_000,
           thinking: { type: 'adaptive' },
-          output_config: { effort: 'medium' },
+          output_config: { effort: EFFORT.CHAT },
           system,
           messages: history.map((message) => ({
             role: message.role,

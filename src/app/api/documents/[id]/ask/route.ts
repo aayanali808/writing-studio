@@ -1,5 +1,5 @@
 import { requireSession } from '@/auth';
-import { MODEL, getAnthropic } from '@/lib/anthropic';
+import { EFFORT, MODEL, getAnthropic } from '@/lib/anthropic';
 import { contextSystemPrompt } from '@/lib/context-bundle';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -91,9 +91,7 @@ export async function POST(request: Request, { params }: RouteContext) {
           model: MODEL,
           max_tokens: 16_000,
           thinking: { type: 'adaptive' },
-          // Low effort: these are short, tightly-scoped edits and the writer is
-          // waiting on them with a popover open.
-          output_config: { effort: 'low' },
+          output_config: { effort: EFFORT.ASK },
           system,
           messages: [{ role: 'user', content: userContent }],
         });

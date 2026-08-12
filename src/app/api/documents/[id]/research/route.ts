@@ -1,6 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { requireSession } from '@/auth';
-import { MODEL, WEB_SEARCH_TOOL, getAnthropic } from '@/lib/anthropic';
+import { EFFORT, MODEL, WEB_SEARCH_TOOL, getAnthropic } from '@/lib/anthropic';
 import { contextSystemPrompt } from '@/lib/context-bundle';
 import type { ResearchSource } from '@/types';
 
@@ -132,7 +132,7 @@ export async function POST(request: Request, { params }: RouteContext) {
         model: MODEL,
         max_tokens: 32_000,
         thinking: { type: 'adaptive' },
-        output_config: { effort: 'high' },
+        output_config: { effort: EFFORT.RESEARCH },
         system,
         tools: [WEB_SEARCH_TOOL],
         messages,
