@@ -24,6 +24,27 @@ export interface DocumentSummary {
   updated_at: string;
 }
 
+/** A full draft snapshot, as stored in `document_versions`. */
+export interface DocumentVersion {
+  id: string;
+  document_id: string;
+  title: string;
+  content: DocNode;
+  plain_text: string;
+  reason: 'auto' | 'ai' | 'manual';
+  created_at: string;
+}
+
+/** A snapshot without its body — what the Versions pane lists. */
+export interface VersionSummary {
+  id: string;
+  title: string;
+  reason: 'auto' | 'ai' | 'manual';
+  created_at: string;
+  characters: number;
+  preview: string;
+}
+
 export interface Source {
   id: string;
   provider: string;
@@ -85,7 +106,8 @@ export type PaneId =
   | 'chat'
   | 'sources'
   | 'goals'
-  | 'research';
+  | 'research'
+  | 'versions';
 
 /** Titles are also the source of truth for which panes the workspace offers. */
 export const PANE_TITLES: Record<PaneId, string> = {
@@ -95,6 +117,7 @@ export const PANE_TITLES: Record<PaneId, string> = {
   sources: 'Sources',
   goals: 'Goals',
   research: 'Research Results',
+  versions: 'Versions',
 };
 
 /** One heading in the draft, as shown in the Outline pane. */

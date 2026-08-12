@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Markdown } from '@/components/Markdown';
 import { useStudio } from '@/components/studio/StudioContext';
+import { apiJson } from '@/lib/client';
 import { insertAfterRange, replaceRange } from './editor-utils';
 import type { EditorSelection, Turn } from '@/types';
 
@@ -34,10 +35,29 @@ export function AskPopover({
   onFollowUp: (question: string) => void;
   onClose: () => void;
 }) {
-  const { editor } = useStudio();
+  const { editor, documentId, flushSave } = useStudio();
   const [copied, setCopied] = useState(false);
   const [reply, setReply] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Records a restore point before an answer overwrites the draft.
+   *
+   * Applying a rewrite is the one action here that destroys prose you wrote,
+   * and undo doesn't survive a reload — so this runs first, and a failure to
+   * snapshot never blocks the edit the writer asked for.
+   */
+  const snapshot = useCallback(async () => {
+    try {
+      await flushSave();
+      await apiJson(`/api/documents/${documentId}/versions`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: 'ai' }),
+      });
+    } catch (error) {
+      console.error('[ask] snapshot failed', error);
+    }
+  }, [documentId, flushSave]);
 
   const latest = [...state.turns]
     .reverse()
@@ -50,14 +70,16 @@ export function AskPopover({
     bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [state.turns]);
 
-  const handleReplace = () => {
+  const handleReplace = async () => {
     if (!editor) return;
+    await snapshot();
     replaceRange(editor, state.selection, answer);
     onClose();
   };
 
-  const handleInsertBelow = () => {
+  const handleInsertBelow = async () => {
     if (!editor) return;
+    await snapshot();
     insertAfterRange(editor, state.selection, answer);
     onClose();
   };
@@ -140,10 +162,10 @@ export function AskPopover({
       </div>
 
       <footer className="grid grid-cols-2 gap-1.5 border-t border-[var(--border)] p-2">
-        <ActionButton onClick={handleReplace} disabled={!canApply} primary>
+        <ActionButton onClick={() => void handleReplace()} disabled={!canApply} primary>
           Replace
         </ActionButton>
-        <ActionButton onClick={handleInsertBelow} disabled={!canApply}>
+        <ActionButton onClick={() => void handleInsertBelow()} disabled={!canApply}>
           Insert below
         </ActionButton>
         <ActionButton onClick={handleCopy} disabled={!canApply}>

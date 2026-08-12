@@ -1,5 +1,6 @@
 import { requireSession } from '@/auth';
 import { deleteDocument, getDocument, saveDocument } from '@/lib/documents';
+import { snapshotDocument } from '@/lib/versions';
 import type { DocNode } from '@/types';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -44,6 +45,19 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       { error: 'Nothing to update — send `title` and/or `content`.' },
       { status: 400 }
     );
+  }
+
+  // Snapshot what's on disk before overwriting it. Rate-limited inside
+  // `snapshotDocument`, so the 800ms autosave doesn't produce a row per
+  // keystroke — and it must run before the write, or it would capture the
+  // change rather than the state you'd want back.
+  if (updates.content !== undefined) {
+    try {
+      await snapshotDocument(id, 'auto');
+    } catch (error) {
+      // A missed snapshot must never cost the writer their save.
+      console.error('[documents] snapshot failed', error);
+    }
   }
 
   const document = await saveDocument(id, updates);

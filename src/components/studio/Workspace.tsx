@@ -14,6 +14,7 @@ import { GoalsPane } from '@/components/panes/GoalsPane';
 import { OutlinePane } from '@/components/panes/OutlinePane';
 import { ResearchPane } from '@/components/panes/ResearchPane';
 import { SourcesPane } from '@/components/panes/SourcesPane';
+import { VersionsPane } from '@/components/panes/VersionsPane';
 import { WritingPane } from '@/components/panes/WritingPane';
 import { DocumentMenu } from '@/components/studio/DocumentMenu';
 import { useStudio } from '@/components/studio/StudioContext';
@@ -50,6 +51,13 @@ function buildDefaultLayout(api: DockviewApi): void {
     id: 'goals',
     component: 'goals',
     title: PANE_TITLES.goals,
+    position: { referencePanel: 'outline', direction: 'within' },
+  });
+
+  api.addPanel({
+    id: 'versions',
+    component: 'versions',
+    title: PANE_TITLES.versions,
     position: { referencePanel: 'outline', direction: 'within' },
   });
 
@@ -102,6 +110,7 @@ export function Workspace({ initialContent }: { initialContent: DocNode }) {
       sources: () => <SourcesPane />,
       goals: () => <GoalsPane />,
       research: () => <ResearchPane />,
+      versions: () => <VersionsPane />,
     }),
     [initialContent]
   );
