@@ -40,6 +40,19 @@ async function upsertSource(
   return row;
 }
 
+/**
+ * Caches one item directly, without going through a provider's `list()`.
+ *
+ * For providers that can't enumerate their corpus — the web being the obvious
+ * one — this is how an item enters the cache at all.
+ */
+export async function cacheSource(
+  providerId: string,
+  item: ExternalSource
+): Promise<Source> {
+  return upsertSource(providerId, item);
+}
+
 export interface SyncReport {
   synced: number;
   errors: { provider: string; message: string }[];

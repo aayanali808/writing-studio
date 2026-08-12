@@ -80,6 +80,13 @@ interface StudioValue {
   refreshSources: () => Promise<void>;
   syncSources: (searchTerm?: string) => Promise<void>;
   togglePin: (sourceId: string, pinned: boolean) => Promise<void>;
+  /**
+   * Caches a web page and pins it in one step.
+   *
+   * The research agent hands back URLs, not cached sources, so pinning one has
+   * to create it first. Returns an error message, or null on success.
+   */
+  pinUrl: (url: string, title: string) => Promise<string | null>;
 
   // --- Research ------------------------------------------------------------
   research: ResearchResult[];
@@ -272,6 +279,28 @@ export function StudioProvider({
     [documentId, refreshSources]
   );
 
+  const pinUrl = useCallback(
+    async (url: string, title: string): Promise<string | null> => {
+      try {
+        const data = await apiJson<{
+          sources: SourceWithPin[];
+          warning: string | null;
+        }>(`/api/documents/${documentId}/pins`, {
+          method: 'POST',
+          body: JSON.stringify({ url, title }),
+        });
+
+        setSources(data.sources);
+        // The pin stands even when the page couldn't be read; say so rather
+        // than reporting success for a source with no text in it.
+        return data.warning;
+      } catch (error) {
+        return error instanceof Error ? error.message : 'Could not pin that page';
+      }
+    },
+    [documentId]
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -361,6 +390,7 @@ export function StudioProvider({
       refreshSources,
       syncSources,
       togglePin,
+      pinUrl,
       research,
       addResearch,
       updateResearch,
@@ -392,6 +422,7 @@ export function StudioProvider({
       refreshSources,
       syncSources,
       togglePin,
+      pinUrl,
       research,
       addResearch,
       updateResearch,

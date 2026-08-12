@@ -6,7 +6,9 @@
  */
 export type { ExternalSource, SourceProvider } from './provider';
 export { getProvider, getProviders, getConfiguredProviders } from './registry';
+export { normaliseUrl } from './web';
 export {
+  cacheSource,
   syncAllProviders,
   searchProviders,
   syncSourceContent,

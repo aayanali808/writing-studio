@@ -1,4 +1,5 @@
 import { notionProvider } from './notion';
+import { webProvider } from './web';
 import type { SourceProvider } from './provider';
 
 /**
@@ -7,7 +8,7 @@ import type { SourceProvider } from './provider';
  * Adding a new source integration is a one-line change here plus its
  * implementation file — nothing else in the app knows which providers exist.
  */
-const providers: SourceProvider[] = [notionProvider];
+const providers: SourceProvider[] = [notionProvider, webProvider];
 
 export function getProviders(): SourceProvider[] {
   return providers;

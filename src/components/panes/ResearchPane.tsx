@@ -31,7 +31,31 @@ export function ResearchPane() {
     updateResearch,
     editor,
     flushSave,
+    sources,
+    pinUrl,
   } = useStudio();
+
+  // Which URLs are already in the Context Bundle, so a source can't be pinned
+  // twice and you can see at a glance what Claude can already read.
+  const pinnedUrls = new Set(
+    sources.filter((source) => source.pinned && source.url).map((source) => source.url)
+  );
+
+  const [pinning, setPinning] = useState<string | null>(null);
+  const [pinError, setPinError] = useState<string | null>(null);
+
+  const pin = useCallback(
+    async (url: string, title: string) => {
+      setPinning(url);
+      setPinError(null);
+
+      const failure = await pinUrl(url, title);
+      if (failure) setPinError(`${hostOf(url)}: ${failure}`);
+
+      setPinning(null);
+    },
+    [pinUrl]
+  );
 
   const followUp = useCallback(
     async (result: ResearchResult, question: string) => {
@@ -112,6 +136,10 @@ export function ResearchPane() {
           </p>
         ) : null}
 
+        {pinError ? (
+          <p className="px-3 py-2 text-[11px] text-[var(--danger)]">{pinError}</p>
+        ) : null}
+
         {research.map((result) => (
           <article
             key={result.id}
@@ -172,6 +200,23 @@ export function ResearchPane() {
                       >
                         insert citation
                       </button>
+
+                      {/* Pinning fetches the page so Claude can read the
+                          source, not just cite it. */}
+                      {pinnedUrls.has(source.url) ? (
+                        <span className="shrink-0 text-[10px] text-[var(--accent)]">
+                          pinned
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={pinning !== null}
+                          onClick={() => void pin(source.url, source.title)}
+                          className="shrink-0 text-[10px] text-[var(--text-faint)] opacity-0 transition-all hover:text-[var(--accent)] focus:opacity-100 group-hover:opacity-100 disabled:opacity-40"
+                        >
+                          {pinning === source.url ? 'reading…' : 'pin as source'}
+                        </button>
+                      )}
                     </div>
                   </li>
                 ))}
