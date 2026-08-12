@@ -41,25 +41,29 @@ export const EFFORT = {
   /** Chat. Analytical, but still a side panel. */
   CHAT: 'medium',
   /**
-   * Research. Judging evidence against a claim is the highest-stakes call, but
-   * it also runs several web searches inside one 60s Vercel function, and
-   * 'high' reliably blew that ceiling in testing. 'medium' lands well inside it.
-   * Raise to 'high' if you move to a plan with a longer function timeout.
+   * Research. Tempting to set high — judging evidence is the highest-stakes
+   * call — but it runs several web searches inside one 60s Vercel function.
+   * In testing, 'high' blew the ceiling outright and 'medium' spent the whole
+   * budget deliberating without completing a single search. The value here is
+   * in the searching, not the deliberation. Raise it on a plan with a longer
+   * function timeout.
    */
-  RESEARCH: 'medium',
+  RESEARCH: 'low',
 } as const;
 
 /**
  * Claude's server-side web search tool. The research agent declares this and
  * Anthropic runs the searches — nothing is executed on our side.
  *
- * `_20260209` is the dynamic-filtering variant, supported on Sonnet 5; it
- * filters results before they reach the context window. Do not additionally
- * declare `code_execution` alongside it — filtering already runs code under the
- * hood, and a second execution environment confuses the model.
+ * Deliberately the basic `_20250305` variant rather than `_20260209`. The
+ * newer one filters results before they reach the context window, but it does
+ * that by running code execution under the hood — a round trip per search that
+ * we cannot afford inside a 60s function. We only need titles and URLs plus a
+ * short verdict, so the filtering buys little here. Switch to `_20260209` if
+ * you move to a longer function timeout and want tighter results.
  */
 export const WEB_SEARCH_TOOL = {
-  type: 'web_search_20260209' as const,
+  type: 'web_search_20250305' as const,
   name: 'web_search' as const,
   // Each search costs wall-clock inside a 60s function. Four is enough to
   // triangulate a claim; six pushed past the ceiling in testing.

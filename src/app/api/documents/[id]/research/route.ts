@@ -27,6 +27,10 @@ const DEADLINE_MS = 50_000;
 const RESEARCH_TASK = [
   'The writer has highlighted a claim in their draft and wants sources for it.',
   '',
+  'Start searching immediately — do not plan the search at length first. You are',
+  'running inside a short time budget, and a few good sources returned quickly',
+  'beat a thorough answer that never arrives.',
+  '',
   'Search the web for material that bears on the claim. Prefer primary sources,',
   'peer-reviewed work, official statistics, and established outlets over',
   'aggregators and SEO content. Report what you actually found, including when',
@@ -135,7 +139,9 @@ export async function POST(request: Request, { params }: RouteContext) {
 
       const stream = anthropic.messages.stream({
         model: MODEL,
-        max_tokens: 32_000,
+        // Bounded: thinking bills against this too, and an unbounded budget
+        // lets deliberation crowd out the searches we actually want.
+        max_tokens: 8_000,
         thinking: { type: 'adaptive' },
         output_config: { effort: EFFORT.RESEARCH },
         system,
