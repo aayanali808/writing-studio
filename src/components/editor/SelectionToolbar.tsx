@@ -15,7 +15,8 @@ export type ToolbarAction =
   | { kind: 'improve' }
   | { kind: 'explain' }
   | { kind: 'research' }
-  | { kind: 'custom'; prompt: string };
+  | { kind: 'custom'; prompt: string }
+  | { kind: 'note'; body: string };
 
 /**
  * The floating toolbar that appears over a selection.
@@ -37,7 +38,7 @@ export function SelectionToolbar({
   const [position, setPosition] = useState<{ top: number; left: number } | null>(
     null
   );
-  const [asking, setAsking] = useState(false);
+  const [mode, setMode] = useState<'actions' | 'ask' | 'note'>('actions');
   const [prompt, setPrompt] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -80,22 +81,28 @@ export function SelectionToolbar({
   }, [editor, selection.from, selection.to, containerRef]);
 
   useEffect(() => {
-    if (asking) inputRef.current?.focus();
-  }, [asking]);
+    if (mode !== 'actions') inputRef.current?.focus();
+  }, [mode]);
 
   // Note: the parent remounts this component (keyed on the selection range)
-  // whenever the selection moves, which resets `asking` and `prompt` without
+  // whenever the selection moves, which resets `mode` and `prompt` without
   // needing an effect to clear them.
 
   if (!position) return null;
 
-  const submitCustom = (keep: boolean) => {
+  const submit = (keep: boolean) => {
     const trimmed = prompt.trim();
     if (!trimmed) return;
-    // Shift-Enter keeps the ask around as a chip for next time.
-    if (keep) savePrompt(trimmed);
-    onAction({ kind: 'custom', prompt: trimmed });
-    setAsking(false);
+
+    if (mode === 'note') {
+      onAction({ kind: 'note', body: trimmed });
+    } else {
+      // Shift-Enter keeps the ask around as a chip for next time.
+      if (keep) savePrompt(trimmed);
+      onAction({ kind: 'custom', prompt: trimmed });
+    }
+
+    setMode('actions');
     setPrompt('');
   };
 
@@ -107,7 +114,7 @@ export function SelectionToolbar({
       onMouseDown={(event) => event.preventDefault()}
     >
       <div className="flex flex-col gap-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-raised)] p-1 shadow-xl">
-        {asking ? (
+        {mode !== 'actions' ? (
           <>
             <div className="flex items-center gap-0.5">
               <input
@@ -117,18 +124,24 @@ export function SelectionToolbar({
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
                     event.preventDefault();
-                    submitCustom(event.shiftKey);
+                    submit(event.shiftKey);
                   }
-                  if (event.key === 'Escape') setAsking(false);
+                  if (event.key === 'Escape') setMode('actions');
                 }}
-                placeholder="Ask about this…  (⇧⏎ to save it too)"
+                placeholder={
+                  mode === 'note'
+                    ? 'Note to yourself…'
+                    : 'Ask about this…  (⇧⏎ to save it too)'
+                }
                 className="w-72 bg-transparent px-2 py-1 text-sm outline-none placeholder:text-[var(--text-faint)]"
               />
-              <ToolbarButton onClick={() => submitCustom(false)}>Send</ToolbarButton>
+              <ToolbarButton onClick={() => submit(false)}>
+                {mode === 'note' ? 'Save' : 'Send'}
+              </ToolbarButton>
             </div>
 
             {/* Saved asks. Clicking one sends it; ⇧⏎ above saves a new one. */}
-            {prompts.length ? (
+            {mode === 'ask' && prompts.length ? (
               <div className="flex max-w-[22rem] flex-wrap gap-1 border-t border-[var(--border)] px-1 pb-0.5 pt-1.5">
                 {prompts.map((saved) => (
                   <span
@@ -140,7 +153,7 @@ export function SelectionToolbar({
                       title={saved.prompt}
                       onClick={() => {
                         onAction({ kind: 'custom', prompt: saved.prompt });
-                        setAsking(false);
+                        setMode('actions');
                       }}
                       className="px-1.5 py-0.5 text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
                     >
@@ -171,7 +184,8 @@ export function SelectionToolbar({
               Find sources
             </ToolbarButton>
             <span className="mx-0.5 h-4 w-px bg-[var(--border-strong)]" />
-            <ToolbarButton onClick={() => setAsking(true)}>Ask…</ToolbarButton>
+            <ToolbarButton onClick={() => setMode('ask')}>Ask…</ToolbarButton>
+            <ToolbarButton onClick={() => setMode('note')}>Note</ToolbarButton>
           </div>
         )}
       </div>

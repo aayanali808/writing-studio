@@ -20,6 +20,7 @@ import {
   writeTypography,
 } from '@/lib/typography-store';
 import type {
+  Comment,
   Document,
   DocNode,
   EditorSelection,
@@ -87,6 +88,13 @@ interface StudioValue {
    * to create it first. Returns an error message, or null on success.
    */
   pinUrl: (url: string, title: string) => Promise<string | null>;
+
+  // --- Comments ------------------------------------------------------------
+  comments: Comment[];
+  setComments: (update: (current: Comment[]) => Comment[]) => void;
+  refreshComments: () => Promise<void>;
+  /** Writes a note and anchors it to the current selection. */
+  addComment: (body: string, quote: string) => Promise<string | null>;
 
   // --- Research ------------------------------------------------------------
   research: ResearchResult[];
@@ -329,6 +337,43 @@ export function StudioProvider({
     };
   }, [documentId]);
 
+  // --- Comments ------------------------------------------------------------
+  const [comments, setCommentsState] = useState<Comment[]>([]);
+
+  const setComments = useCallback(
+    (update: (current: Comment[]) => Comment[]) => setCommentsState(update),
+    []
+  );
+
+  const refreshComments = useCallback(async () => {
+    const data = await apiJson<{ comments: Comment[] }>(
+      `/api/documents/${documentId}/comments`
+    );
+    setCommentsState(data.comments);
+  }, [documentId]);
+
+  /**
+   * Creates the note, then returns its id so the caller can anchor the mark.
+   *
+   * The row has to exist first: the mark in the document carries the row's id,
+   * and that link is what keeps the highlight on its passage through edits.
+   */
+  const addComment = useCallback(
+    async (body: string, quote: string): Promise<string | null> => {
+      try {
+        const data = await apiJson<{ comment: Comment }>(
+          `/api/documents/${documentId}/comments`,
+          { method: 'POST', body: JSON.stringify({ body, quote }) }
+        );
+        setCommentsState((current) => [data.comment, ...current]);
+        return data.comment.id;
+      } catch {
+        return null;
+      }
+    },
+    [documentId]
+  );
+
   // --- Research ------------------------------------------------------------
   const [research, setResearch] = useState<ResearchResult[]>([]);
   const [researchBusy, setResearchBusy] = useState(false);
@@ -391,6 +436,10 @@ export function StudioProvider({
       syncSources,
       togglePin,
       pinUrl,
+      comments,
+      setComments,
+      refreshComments,
+      addComment,
       research,
       addResearch,
       updateResearch,
@@ -423,6 +472,10 @@ export function StudioProvider({
       syncSources,
       togglePin,
       pinUrl,
+      comments,
+      setComments,
+      refreshComments,
+      addComment,
       research,
       addResearch,
       updateResearch,

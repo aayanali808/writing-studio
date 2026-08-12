@@ -5,6 +5,7 @@ import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { CharacterCount, Focus, Placeholder } from '@tiptap/extensions';
 import { AskPopover, type AskState } from '@/components/editor/AskPopover';
+import { CommentMark } from '@/components/editor/comment-mark';
 import { EditorToolbar } from '@/components/editor/EditorToolbar';
 import { readSelection } from '@/components/editor/editor-utils';
 import {
@@ -57,6 +58,7 @@ export function WritingPane({ initialContent }: { initialContent: DocNode }) {
     setSelection,
     setOutline,
     typography,
+    addComment,
     addResearch,
     setResearchBusy,
     focusPane,
@@ -86,6 +88,7 @@ export function WritingPane({ initialContent }: { initialContent: DocNode }) {
       // 'shallowest' keeps the mark on the top-level block rather than on a
       // list item deep inside one.
       Focus.configure({ className: 'has-focus', mode: 'shallowest' }),
+      CommentMark,
       CharacterCount,
     ],
     content: initialContent,
@@ -265,6 +268,30 @@ export function WritingPane({ initialContent }: { initialContent: DocNode }) {
     [documentId, flushSave, addResearch, setResearchBusy, focusPane]
   );
 
+  /**
+   * Writes a note and marks the passage it belongs to.
+   *
+   * The row is created first because the mark carries its id — that link is
+   * what keeps the highlight on the passage as the text around it changes.
+   * The range is captured from the selection made when the toolbar opened, so
+   * the mark lands where the writer was looking.
+   */
+  const runNote = useCallback(
+    async (current: EditorSelection, body: string) => {
+      const id = await addComment(body, current.text);
+      if (!id || !editor) return;
+
+      editor
+        .chain()
+        .setTextSelection({ from: current.from, to: current.to })
+        .setComment(id)
+        .run();
+
+      focusPane('comments');
+    },
+    [addComment, editor, focusPane]
+  );
+
   const handleAction = useCallback(
     (action: ToolbarAction) => {
       if (!selection) return;
@@ -273,13 +300,17 @@ export function WritingPane({ initialContent }: { initialContent: DocNode }) {
         void runResearch(selection);
         return;
       }
+      if (action.kind === 'note') {
+        void runNote(selection, action.body);
+        return;
+      }
       if (action.kind === 'custom') {
         runAsk('custom', selection, action.prompt);
         return;
       }
       runAsk(action.kind, selection);
     },
-    [selection, runAsk, runResearch]
+    [selection, runAsk, runResearch, runNote]
   );
 
   const words = editor?.storage.characterCount?.words?.() ?? 0;

@@ -10,6 +10,7 @@ import type {
   SerializedDockview,
 } from 'dockview';
 import { ChatPane } from '@/components/panes/ChatPane';
+import { CommentsPane } from '@/components/panes/CommentsPane';
 import { GoalsPane } from '@/components/panes/GoalsPane';
 import { OutlinePane } from '@/components/panes/OutlinePane';
 import { ResearchPane } from '@/components/panes/ResearchPane';
@@ -62,6 +63,13 @@ function buildDefaultLayout(api: DockviewApi): void {
   });
 
   api.addPanel({
+    id: 'comments',
+    component: 'comments',
+    title: PANE_TITLES.comments,
+    position: { referencePanel: 'chat', direction: 'within' },
+  });
+
+  api.addPanel({
     id: 'chat',
     component: 'chat',
     title: PANE_TITLES.chat,
@@ -111,6 +119,7 @@ export function Workspace({ initialContent }: { initialContent: DocNode }) {
       goals: () => <GoalsPane />,
       research: () => <ResearchPane />,
       versions: () => <VersionsPane />,
+      comments: () => <CommentsPane />,
     }),
     [initialContent]
   );

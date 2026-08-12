@@ -79,6 +79,26 @@ CREATE TABLE IF NOT EXISTS document_versions (
 CREATE INDEX IF NOT EXISTS document_versions_document_idx
   ON document_versions (document_id, created_at DESC);
 
+-- Notes to yourself, anchored to a passage.
+--
+-- The anchor is a mark stored inside `documents.content` carrying this row's
+-- id, so the highlight survives editing the text around it — a character
+-- offset would not. A comment whose mark has been deleted stays here as an
+-- orphan; the pane shows it without a jump-to rather than dropping the note.
+CREATE TABLE IF NOT EXISTS comments (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  document_id  UUID NOT NULL REFERENCES documents (id) ON DELETE CASCADE,
+  -- The text that was highlighted when the note was written, for context in
+  -- the pane and so an orphaned note still says what it was about.
+  quote        TEXT NOT NULL DEFAULT '',
+  body         TEXT NOT NULL,
+  resolved     BOOLEAN NOT NULL DEFAULT false,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS comments_document_idx
+  ON comments (document_id, resolved, created_at);
+
 -- One goals record per document.
 CREATE TABLE IF NOT EXISTS goals (
   document_id  UUID PRIMARY KEY REFERENCES documents (id) ON DELETE CASCADE,

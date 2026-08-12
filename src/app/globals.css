@@ -382,3 +382,19 @@ body {
   background: var(--bg-inset);
   font-weight: 600;
 }
+
+/* --- Margin comments ----------------------------------------------------- */
+
+/*
+ * The anchor for a note. Underlined rather than highlighted so a commented
+ * passage still reads as prose — several notes can overlap the same words.
+ */
+.studio-prose .ProseMirror .studio-comment {
+  border-bottom: 2px solid var(--accent-soft);
+  background: rgba(200, 149, 109, 0.06);
+  cursor: help;
+}
+
+.studio-prose .ProseMirror .studio-comment:hover {
+  border-bottom-color: var(--accent);
+}

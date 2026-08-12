@@ -60,6 +60,23 @@ export interface SourceWithPin extends Source {
   pinned: boolean;
 }
 
+/**
+ * A note to yourself, anchored to a passage.
+ *
+ * The anchor is a `comment` mark inside the document carrying this id, not a
+ * position stored here — ProseMirror maps marks through edits, so the highlight
+ * stays put as you rewrite around it.
+ */
+export interface Comment {
+  id: string;
+  document_id: string;
+  /** The text as it read when the note was written. */
+  quote: string;
+  body: string;
+  resolved: boolean;
+  created_at: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -107,7 +124,8 @@ export type PaneId =
   | 'sources'
   | 'goals'
   | 'research'
-  | 'versions';
+  | 'versions'
+  | 'comments';
 
 /** Titles are also the source of truth for which panes the workspace offers. */
 export const PANE_TITLES: Record<PaneId, string> = {
@@ -118,6 +136,7 @@ export const PANE_TITLES: Record<PaneId, string> = {
   goals: 'Goals',
   research: 'Research Results',
   versions: 'Versions',
+  comments: 'Comments',
 };
 
 /** One heading in the draft, as shown in the Outline pane. */
