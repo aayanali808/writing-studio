@@ -1,51 +1,78 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Markdown } from '@/components/Markdown';
 import { useStudio } from '@/components/studio/StudioContext';
 import { insertAfterRange, replaceRange } from './editor-utils';
-import type { EditorSelection } from '@/types';
+import type { EditorSelection, Turn } from '@/types';
 
 export interface AskState {
   label: string;
   selection: EditorSelection;
-  answer: string;
+  /** What opened the thread, resent with each follow-up. */
+  request: { action: 'improve' | 'explain' | 'custom'; prompt?: string };
+  /** `[assistant, user, assistant, …]` — the opening request is implicit. */
+  turns: Turn[];
   pending: boolean;
   error: string | null;
 }
 
 /**
- * The side popover holding a highlight-to-ask response, with the actions that
- * put it back into the draft.
+ * The side popover holding a highlight-to-ask thread.
+ *
+ * It is a conversation, not a single answer: you can write back, and the reply
+ * carries the whole thread plus the same Context Bundle. The apply actions at
+ * the bottom always act on the *latest* answer, which is the one you would have
+ * been reading when you decided to use it.
  */
 export function AskPopover({
   state,
+  onFollowUp,
   onClose,
 }: {
   state: AskState;
+  onFollowUp: (question: string) => void;
   onClose: () => void;
 }) {
   const { editor } = useStudio();
   const [copied, setCopied] = useState(false);
+  const [reply, setReply] = useState('');
+  const bottomRef = useRef<HTMLDivElement>(null);
 
-  const canApply =
-    Boolean(editor) && !state.pending && Boolean(state.answer.trim());
+  const latest = [...state.turns]
+    .reverse()
+    .find((turn) => turn.role === 'assistant');
+  const answer = latest?.content ?? '';
+
+  const canApply = Boolean(editor) && !state.pending && Boolean(answer.trim());
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: 'end' });
+  }, [state.turns]);
 
   const handleReplace = () => {
     if (!editor) return;
-    replaceRange(editor, state.selection, state.answer);
+    replaceRange(editor, state.selection, answer);
     onClose();
   };
 
   const handleInsertBelow = () => {
     if (!editor) return;
-    insertAfterRange(editor, state.selection, state.answer);
+    insertAfterRange(editor, state.selection, answer);
     onClose();
   };
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(state.answer);
+    await navigator.clipboard.writeText(answer);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  };
+
+  const send = () => {
+    const question = reply.trim();
+    if (!question || state.pending) return;
+    onFollowUp(question);
+    setReply('');
   };
 
   return (
@@ -70,17 +97,46 @@ export function AskPopover({
         </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-3">
+      <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
+        {state.turns.map((turn, index) =>
+          turn.role === 'user' ? (
+            <p
+              key={index}
+              className="ml-5 rounded-lg bg-[var(--bg-inset)] px-2.5 py-1.5 text-xs leading-relaxed"
+            >
+              {turn.content}
+            </p>
+          ) : (
+            <div key={index} className="text-sm leading-relaxed">
+              <Markdown source={turn.content} />
+              {index === state.turns.length - 1 && state.pending ? (
+                <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-[var(--accent)] align-middle" />
+              ) : null}
+            </div>
+          )
+        )}
+
         {state.error ? (
           <p className="text-sm text-[var(--danger)]">{state.error}</p>
-        ) : (
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">
-            {state.answer}
-            {state.pending ? (
-              <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-[var(--accent)] align-middle" />
-            ) : null}
-          </p>
-        )}
+        ) : null}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="border-t border-[var(--border)] p-2">
+        <textarea
+          value={reply}
+          onChange={(event) => setReply(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault();
+              send();
+            }
+          }}
+          rows={2}
+          disabled={state.pending}
+          placeholder="Reply to Claude…  (Enter to send)"
+          className="w-full resize-none rounded-md border border-[var(--border)] bg-[var(--bg-inset)] px-2.5 py-1.5 text-xs outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-50 placeholder:text-[var(--text-faint)]"
+        />
       </div>
 
       <footer className="grid grid-cols-2 gap-1.5 border-t border-[var(--border)] p-2">

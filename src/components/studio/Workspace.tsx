@@ -11,6 +11,7 @@ import type {
 } from 'dockview';
 import { ChatPane } from '@/components/panes/ChatPane';
 import { GoalsPane } from '@/components/panes/GoalsPane';
+import { OutlinePane } from '@/components/panes/OutlinePane';
 import { ResearchPane } from '@/components/panes/ResearchPane';
 import { SourcesPane } from '@/components/panes/SourcesPane';
 import { WritingPane } from '@/components/panes/WritingPane';
@@ -28,18 +29,27 @@ function buildDefaultLayout(api: DockviewApi): void {
     title: PANE_TITLES.writing,
   });
 
+  // The left rail is the "about this piece" group: where you are in it, what
+  // it's for, and what it's built from.
+  api.addPanel({
+    id: 'outline',
+    component: 'outline',
+    title: PANE_TITLES.outline,
+    position: { direction: 'left' },
+  });
+
   api.addPanel({
     id: 'sources',
     component: 'sources',
     title: PANE_TITLES.sources,
-    position: { direction: 'left' },
+    position: { referencePanel: 'outline', direction: 'within' },
   });
 
   api.addPanel({
     id: 'goals',
     component: 'goals',
     title: PANE_TITLES.goals,
-    position: { referencePanel: 'sources', direction: 'within' },
+    position: { referencePanel: 'outline', direction: 'within' },
   });
 
   api.addPanel({
@@ -58,12 +68,15 @@ function buildDefaultLayout(api: DockviewApi): void {
 
   // Writing gets the room; the side rails start narrow.
   try {
-    api.getPanel('sources')?.api.group.api.setSize({ width: 230 });
+    api.getPanel('outline')?.api.group.api.setSize({ width: 230 });
     api.getPanel('chat')?.api.group.api.setSize({ width: 400 });
   } catch {
     // Sizing is cosmetic — a failure here shouldn't break the workspace.
   }
 
+  // Outline is the useful default tab in the left group — `setActive` on the
+  // group's tab first, then on Writing, which leaves the caret in the draft.
+  api.getPanel('outline')?.api.setActive();
   api.getPanel('writing')?.api.setActive();
 }
 
@@ -83,6 +96,7 @@ export function Workspace({ initialContent }: { initialContent: DocNode }) {
       writing: (_props: IDockviewPanelProps) => (
         <WritingPane initialContent={initialContent} />
       ),
+      outline: () => <OutlinePane />,
       chat: () => <ChatPane />,
       sources: () => <SourcesPane />,
       goals: () => <GoalsPane />,

@@ -10,11 +10,16 @@ reopen — not a fixed three-column layout. The arrangement is saved per documen
 
 | Pane | What it does |
 | --- | --- |
-| **Writing** | TipTap editor with autosave. Highlight any passage for the floating ask toolbar. |
+| **Writing** | TipTap editor with autosave, a formatting bar, and typeface/size/measure controls. Highlight any passage for the floating ask toolbar. |
+| **Outline** | Live table of contents built from the draft's headings. Click one to jump to it. |
 | **AI Chat** | Conversation about the piece. Every turn carries the Context Bundle. |
 | **Sources** | Read-only external material (Notion today), pinnable into the Context Bundle. |
 | **Goals** | Free-text goals for the piece — audience, argument, constraints, tone. |
 | **Research Results** | Web sources found by the research agent, insertable as citations. |
+
+Every pane showing Claude's output renders its Markdown, and every one of them
+is a conversation — you can reply to an ask, and you can question a research
+verdict, without leaving the pane.
 
 ## The Context Bundle
 
@@ -92,6 +97,15 @@ can raise `maxDuration` to 300 in
 off, drop `EFFORT.RESEARCH` to `'medium'` or lower `WEB_SEARCH_TOOL.max_uses`
 in `src/lib/anthropic.ts`.
 
+## Reading Claude's replies
+
+`src/lib/markdown.ts` parses the Markdown subset Claude actually writes into a
+small AST, which has two renderers: `<Markdown>` for the panes, and
+`markdownToDoc()` for TipTap. That is the reason it isn't just a
+markdown-to-HTML function — the same parse drives both what you read and what
+lands in the draft when you hit Replace or Insert below, so they can't drift.
+Source text never becomes HTML, so model output can't inject markup.
+
 ## Adding a source provider
 
 `src/lib/sources/provider.ts` defines the interface — `list()`, `fetch(id)`,
@@ -114,13 +128,16 @@ src/
   components/
     studio/StudioContext.tsx     shared client state for all panes
     studio/Workspace.tsx         dockview host + layout persistence
-    panes/                       the five panes
-    editor/                      TipTap glue: selection reading, toolbar, ask popover
+    panes/                       the six panes
+    editor/                      TipTap glue: selection, formatting bar, ask popover
+    Markdown.tsx                 renders Claude's replies in the panes
   lib/
     context-bundle.ts            what Claude knows (see above)
     anthropic.ts                 model id + web search tool config
+    markdown.ts                  Markdown → AST → React or TipTap
+    turns.ts                     reads a conversation thread off a request
     sources/                     provider interface, registry, Postgres cache
-    db.ts, documents.ts, tiptap.ts, client.ts
+    db.ts, documents.ts, tiptap.ts, client.ts, typography-store.ts
 ```
 
 ## Scripts

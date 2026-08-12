@@ -79,11 +79,22 @@ body {
 
 /* --- TipTap editor ------------------------------------------------------- */
 
+/*
+ * Typeface, size, and measure come in as custom properties set on the scroll
+ * container by the Writing pane, from the preferences in the editor toolbar.
+ * The fallbacks are what the editor looked like before the toolbar existed.
+ */
+
 .studio-prose .ProseMirror {
   outline: none;
   min-height: 100%;
-  font-size: 1.0625rem;
+  font-family: var(--editor-font, inherit);
+  font-size: var(--editor-size, 1.0625rem);
   line-height: 1.75;
+}
+
+.studio-measure {
+  max-width: var(--editor-measure, 46rem);
 }
 
 .studio-prose .ProseMirror > * + * {
@@ -181,4 +192,150 @@ body {
 .studio-prose .ProseMirror .selection-preserved {
   background: var(--accent-soft);
   border-radius: 2px;
+}
+
+/* --- Rendered Markdown --------------------------------------------------- */
+
+/*
+ * Claude's replies, wherever they appear — chat, the ask popover, research
+ * verdicts. Styled once here rather than per pane so the three read alike, and
+ * scaled down: these live in side panels, not in the draft.
+ */
+
+.studio-md > :first-child {
+  margin-top: 0;
+}
+
+.studio-md > :last-child {
+  margin-bottom: 0;
+}
+
+.studio-md p,
+.studio-md ul,
+.studio-md ol,
+.studio-md pre,
+.studio-md blockquote {
+  margin: 0.6em 0;
+}
+
+.studio-md h3,
+.studio-md h4,
+.studio-md h5,
+.studio-md h6 {
+  font-weight: 600;
+  line-height: 1.35;
+  margin: 1.1em 0 0.4em;
+}
+
+.studio-md h3 {
+  font-size: 1.05em;
+}
+
+.studio-md h4,
+.studio-md h5,
+.studio-md h6 {
+  font-size: 0.95em;
+  color: var(--text-muted);
+}
+
+.studio-md ul,
+.studio-md ol {
+  padding-left: 1.25em;
+}
+
+.studio-md ul {
+  list-style: disc;
+}
+
+.studio-md ol {
+  list-style: decimal;
+}
+
+.studio-md li {
+  margin: 0.25em 0;
+}
+
+/* Tight lists: a single-paragraph item shouldn't carry paragraph margins. */
+.studio-md li > p {
+  margin: 0;
+}
+
+.studio-md li > p + p {
+  margin-top: 0.4em;
+}
+
+.studio-md blockquote {
+  border-left: 2px solid var(--border-strong);
+  padding-left: 0.75em;
+  color: var(--text-muted);
+}
+
+.studio-md code {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.08em 0.3em;
+  font-size: 0.88em;
+  word-break: break-word;
+}
+
+.studio-md pre {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6em 0.75em;
+  overflow-x: auto;
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+
+.studio-md pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  word-break: normal;
+}
+
+.studio-md a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.studio-md hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.1em 0;
+}
+
+.studio-md strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Panes are narrow, so a wide table scrolls inside itself rather than
+   stretching the pane and pushing the reply box off-screen. */
+.studio-md-scroll {
+  overflow-x: auto;
+  margin: 0.6em 0;
+}
+
+.studio-md table {
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.studio-md th,
+.studio-md td {
+  border: 1px solid var(--border);
+  padding: 0.3em 0.55em;
+  text-align: left;
+  vertical-align: top;
+}
+
+.studio-md th {
+  background: var(--bg-inset);
+  font-weight: 600;
 }

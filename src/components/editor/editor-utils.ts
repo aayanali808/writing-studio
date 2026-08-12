@@ -1,5 +1,6 @@
 import type { Editor } from '@tiptap/react';
-import type { EditorSelection } from '@/types';
+import { markdownToDoc } from '@/lib/markdown';
+import type { DocNode, EditorSelection } from '@/types';
 
 /**
  * Helpers for writing AI output back into the draft.
@@ -49,17 +50,6 @@ function readSurrounding(editor: Editor, from: number, to: number): string {
   }
 }
 
-/** Splits plain text into TipTap paragraph nodes on blank lines. */
-function toParagraphs(text: string) {
-  return text
-    .trim()
-    .split(/\n{2,}/)
-    .map((block) => ({
-      type: 'paragraph',
-      content: block.trim() ? [{ type: 'text', text: block.trim() }] : [],
-    }));
-}
-
 /** Clamps a stored position to the document as it stands now. */
 function clamp(editor: Editor, position: number): number {
   return Math.max(0, Math.min(position, editor.state.doc.content.size));
@@ -68,12 +58,16 @@ function clamp(editor: Editor, position: number): number {
 /**
  * Swaps the original selection for the answer.
  *
- * Single-paragraph answers are inserted as inline text rather than as a
+ * The answer is read as Markdown, because Claude writes Markdown whether or not
+ * it was asked to — inserting it verbatim used to leave literal `**asterisks**`
+ * in the draft.
+ *
+ * Answers that are a single paragraph go in as inline content rather than as a
  * paragraph node. Inserting a block node mid-paragraph makes ProseMirror split
  * the paragraph around it, so rewriting one sentence used to leave the rest of
- * its paragraph orphaned below — which is not what "replace this sentence"
- * should do. Multi-paragraph answers still come through as blocks, since there
- * the split is the point.
+ * its paragraph orphaned below — not what "replace this sentence" should do.
+ * Anything richer still comes through as blocks, since there the split is the
+ * point.
  */
 export function replaceRange(
   editor: Editor,
@@ -82,25 +76,31 @@ export function replaceRange(
 ): void {
   const from = clamp(editor, selection.from);
   const to = clamp(editor, selection.to);
-  const trimmed = text.trim();
 
-  const isMultiParagraph = /\n{2,}/.test(trimmed);
+  const blocks = markdownToDoc(text);
+  if (!blocks.length) return;
+
   const spansBlocks =
     editor.state.doc.resolve(from).parent !== editor.state.doc.resolve(to).parent;
 
-  const content =
-    isMultiParagraph || spansBlocks ? toParagraphs(trimmed) : trimmed;
+  const inline =
+    blocks.length === 1 && blocks[0].type === 'paragraph' ? blocks[0].content : null;
+
+  const content: DocNode[] = inline && !spansBlocks ? inline : blocks;
 
   editor.chain().focus().insertContentAt({ from, to }, content).run();
 }
 
-/** Adds the answer as a new paragraph after the selection, leaving it intact. */
+/** Adds the answer as new blocks after the selection, leaving it intact. */
 export function insertAfterRange(
   editor: Editor,
   selection: EditorSelection,
   text: string
 ): void {
   const to = clamp(editor, selection.to);
+
+  const blocks = markdownToDoc(text);
+  if (!blocks.length) return;
 
   // `after()` resolves to the position just past the block the selection ends
   // in, which is where a sibling paragraph belongs.
@@ -111,7 +111,7 @@ export function insertAfterRange(
     position = to;
   }
 
-  editor.chain().focus().insertContentAt(position, toParagraphs(text)).run();
+  editor.chain().focus().insertContentAt(position, blocks).run();
 }
 
 /** Drops a formatted, linked reference at the cursor. */

@@ -1,7 +1,11 @@
 'use client';
 
+import { useCallback, useState } from 'react';
+import { Markdown } from '@/components/Markdown';
 import { insertCitation } from '@/components/editor/editor-utils';
 import { useStudio } from '@/components/studio/StudioContext';
+import { apiJson } from '@/lib/client';
+import type { ResearchResult, ResearchSource } from '@/types';
 
 /**
  * Research Results.
@@ -10,12 +14,71 @@ import { useStudio } from '@/components/studio/StudioContext';
  * triggered from the highlight-to-ask toolbar. Each source can be dropped into
  * the draft at the cursor as a formatted, linked citation.
  *
+ * Each result is a thread: you can question a verdict, and the follow-up goes
+ * back with the turns so far, searching again if it needs to. New sources merge
+ * into the same list rather than starting a second result.
+ *
  * Results are session-scoped on purpose: they are search output, not the
  * writer's own material. Anything worth keeping goes into the draft as a
  * citation, or gets pinned as a source.
  */
 export function ResearchPane() {
-  const { research, researchBusy, clearResearch, editor } = useStudio();
+  const {
+    documentId,
+    research,
+    researchBusy,
+    clearResearch,
+    updateResearch,
+    editor,
+    flushSave,
+  } = useStudio();
+
+  const followUp = useCallback(
+    async (result: ResearchResult, question: string) => {
+      const history = [
+        ...result.turns,
+        { role: 'user' as const, content: question },
+      ];
+
+      updateResearch(result.id, { turns: history, pending: true, error: null });
+
+      try {
+        await flushSave();
+
+        const data = await apiJson<{
+          summary: string;
+          sources: ResearchSource[];
+        }>(`/api/documents/${documentId}/research`, {
+          method: 'POST',
+          body: JSON.stringify({
+            claim: result.claim,
+            surrounding: result.surrounding,
+            history,
+          }),
+        });
+
+        // A follow-up may or may not search again; merge whatever came back
+        // into the thread's list rather than replacing it.
+        const seen = new Set(result.sources.map((source) => source.url));
+        const merged = [
+          ...result.sources,
+          ...data.sources.filter((source) => !seen.has(source.url)),
+        ];
+
+        updateResearch(result.id, {
+          turns: [...history, { role: 'assistant', content: data.summary }],
+          sources: merged,
+          pending: false,
+        });
+      } catch (error) {
+        updateResearch(result.id, {
+          pending: false,
+          error: error instanceof Error ? error.message : 'The request failed.',
+        });
+      }
+    },
+    [documentId, flushSave, updateResearch]
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -58,10 +121,29 @@ export function ResearchPane() {
               {result.claim}
             </blockquote>
 
-            {result.summary ? (
-              <p className="mt-2.5 whitespace-pre-wrap text-sm leading-relaxed">
-                {result.summary}
-              </p>
+            <div className="mt-2.5 space-y-2">
+              {result.turns.map((turn, index) =>
+                turn.role === 'user' ? (
+                  <p
+                    key={index}
+                    className="ml-5 rounded-lg bg-[var(--bg-inset)] px-2.5 py-1.5 text-xs leading-relaxed"
+                  >
+                    {turn.content}
+                  </p>
+                ) : (
+                  <div key={index} className="text-sm leading-relaxed">
+                    <Markdown source={turn.content} />
+                  </div>
+                )
+              )}
+            </div>
+
+            {result.pending ? (
+              <p className="mt-2 text-xs text-[var(--text-faint)]">Looking…</p>
+            ) : null}
+
+            {result.error ? (
+              <p className="mt-2 text-xs text-[var(--danger)]">{result.error}</p>
             ) : null}
 
             {result.sources.length > 0 ? (
@@ -96,15 +178,54 @@ export function ResearchPane() {
               </ul>
             ) : null}
 
-            {result.sources.length === 0 && !result.summary ? (
+            {result.sources.length === 0 && result.turns.length === 0 && !result.error ? (
               <p className="mt-2 text-xs text-[var(--text-faint)]">
                 Nothing came back for this claim.
               </p>
             ) : null}
+
+            <FollowUpBox
+              disabled={result.pending}
+              onSend={(question) => void followUp(result, question)}
+            />
           </article>
         ))}
       </div>
     </div>
+  );
+}
+
+/** The reply box under one research thread. */
+function FollowUpBox({
+  disabled,
+  onSend,
+}: {
+  disabled: boolean;
+  onSend: (question: string) => void;
+}) {
+  const [value, setValue] = useState('');
+
+  const send = () => {
+    const question = value.trim();
+    if (!question || disabled) return;
+    onSend(question);
+    setValue('');
+  };
+
+  return (
+    <input
+      value={value}
+      onChange={(event) => setValue(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          send();
+        }
+      }}
+      disabled={disabled}
+      placeholder="Ask about these findings…"
+      className="mt-3 w-full rounded-md border border-[var(--border)] bg-[var(--bg-inset)] px-2.5 py-1.5 text-xs outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-50 placeholder:text-[var(--text-faint)]"
+    />
   );
 }
 

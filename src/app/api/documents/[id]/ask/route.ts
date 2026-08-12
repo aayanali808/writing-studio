@@ -1,6 +1,8 @@
+import type Anthropic from '@anthropic-ai/sdk';
 import { requireSession } from '@/auth';
 import { EFFORT, MODEL, getAnthropic } from '@/lib/anthropic';
 import { contextSystemPrompt } from '@/lib/context-bundle';
+import { readTurns } from '@/lib/turns';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -13,7 +15,12 @@ export const maxDuration = 60;
  * The selection plus its surrounding paragraph is sent alongside the full
  * Context Bundle, so Claude can see both the sentence under the cursor and the
  * piece it belongs to. The response streams back into the side popover, where
- * the writer can replace the selection with it, insert it below, or discard it.
+ * the writer can reply to it, replace the selection with it, insert it below,
+ * or discard it.
+ *
+ * The popover is a thread, so a request can carry the turns already exchanged.
+ * The opening turn is always rebuilt here from the selection rather than sent
+ * by the client — see `readTurns`.
  */
 
 const ASK_TASK = [
@@ -27,6 +34,15 @@ const ASK_TASK = [
   '',
   'When the request is to explain, critique, or answer a question, reply with a',
   'short, direct answer instead. Do not pad it.',
+  '',
+  'The writer can reply to you, so treat this as a conversation. On a follow-up,',
+  'answer what they actually asked rather than restating the previous answer —',
+  'and when they ask for another attempt at a rewrite, reply with the new prose',
+  'alone, exactly as you would have the first time.',
+  '',
+  'Markdown is rendered, so use it where it genuinely helps — but a rewrite is',
+  'prose the writer will paste into their draft, so never wrap one in headings,',
+  'bullets, or code fences.',
 ].join('\n');
 
 type AskAction = 'improve' | 'explain' | 'custom';
@@ -82,6 +98,11 @@ export async function POST(request: Request, { params }: RouteContext) {
     instruction,
   ].join('\n');
 
+  const messages: Anthropic.MessageParam[] = [
+    { role: 'user', content: userContent },
+    ...readTurns(body?.history),
+  ];
+
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
@@ -93,7 +114,7 @@ export async function POST(request: Request, { params }: RouteContext) {
           thinking: { type: 'adaptive' },
           output_config: { effort: EFFORT.ASK },
           system,
-          messages: [{ role: 'user', content: userContent }],
+          messages,
         });
 
         messageStream.on('text', (delta) => {

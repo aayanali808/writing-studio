@@ -9,15 +9,24 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react';
 import { useDebouncedSave, type SaveStatus } from '@/hooks/use-debounced-save';
 import { apiJson } from '@/lib/client';
+import {
+  getServerTypography,
+  getTypography,
+  subscribeTypography,
+  writeTypography,
+} from '@/lib/typography-store';
 import type {
   Document,
   DocNode,
   EditorSelection,
+  OutlineItem,
   ResearchResult,
   SourceWithPin,
+  Typography,
 } from '@/types';
 
 interface ProviderInfo {
@@ -50,6 +59,14 @@ interface StudioValue {
   selection: EditorSelection | null;
   setSelection: (selection: EditorSelection | null) => void;
 
+  /** The draft's headings, in document order. Feeds the Outline pane. */
+  outline: OutlineItem[];
+  setOutline: (outline: OutlineItem[]) => void;
+
+  /** How the editor surface is displayed. A preference, not document data. */
+  typography: Typography;
+  setTypography: (patch: Partial<Typography>) => void;
+
   // --- Goals ---------------------------------------------------------------
   goals: string;
   setGoals: (goals: string) => void;
@@ -67,6 +84,8 @@ interface StudioValue {
   // --- Research ------------------------------------------------------------
   research: ResearchResult[];
   addResearch: (result: ResearchResult) => void;
+  /** Applied to one thread — follow-ups append turns to a result in place. */
+  updateResearch: (id: string, patch: Partial<ResearchResult>) => void;
   clearResearch: () => void;
   researchBusy: boolean;
   setResearchBusy: (busy: boolean) => void;
@@ -138,6 +157,20 @@ export function StudioProvider({
   // --- Editor handle -------------------------------------------------------
   const [editor, setEditor] = useState<Editor | null>(null);
   const [selection, setSelection] = useState<EditorSelection | null>(null);
+  const [outline, setOutline] = useState<OutlineItem[]>([]);
+
+  // --- Typography ----------------------------------------------------------
+  // Kept in localStorage rather than in the database: it's how *this* screen
+  // should look, not a property of the piece. See `lib/typography-store`.
+  const typography = useSyncExternalStore(
+    subscribeTypography,
+    getTypography,
+    getServerTypography
+  );
+
+  const setTypography = useCallback((patch: Partial<Typography>) => {
+    writeTypography(patch);
+  }, []);
 
   // --- Goals ---------------------------------------------------------------
   const [goals, setGoalsState] = useState(initialGoals);
@@ -275,6 +308,17 @@ export function StudioProvider({
     setResearch((current) => [result, ...current]);
   }, []);
 
+  const updateResearch = useCallback(
+    (id: string, patch: Partial<ResearchResult>) => {
+      setResearch((current) =>
+        current.map((result) =>
+          result.id === id ? { ...result, ...patch } : result
+        )
+      );
+    },
+    []
+  );
+
   const clearResearch = useCallback(() => setResearch([]), []);
 
   // --- Pane focus ----------------------------------------------------------
@@ -303,6 +347,10 @@ export function StudioProvider({
       setEditor,
       selection,
       setSelection,
+      outline,
+      setOutline,
+      typography,
+      setTypography,
       goals,
       setGoals,
       goalsStatus,
@@ -315,6 +363,7 @@ export function StudioProvider({
       togglePin,
       research,
       addResearch,
+      updateResearch,
       clearResearch,
       researchBusy,
       setResearchBusy,
@@ -330,6 +379,9 @@ export function StudioProvider({
       flushSave,
       editor,
       selection,
+      outline,
+      typography,
+      setTypography,
       goals,
       setGoals,
       goalsStatus,
@@ -342,6 +394,7 @@ export function StudioProvider({
       togglePin,
       research,
       addResearch,
+      updateResearch,
       clearResearch,
       researchBusy,
       focusPane,

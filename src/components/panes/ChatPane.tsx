@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Markdown } from '@/components/Markdown';
 import { useStudio } from '@/components/studio/StudioContext';
 import { apiJson, apiStream } from '@/lib/client';
 import type { ChatMessage } from '@/types';
@@ -131,12 +132,20 @@ export function ChatPane() {
             <div className="mb-0.5 text-[10px] uppercase tracking-wider text-[var(--text-faint)]">
               {message.role === 'user' ? 'You' : 'Claude'}
             </div>
-            <p className="whitespace-pre-wrap text-sm leading-relaxed">
-              {message.content}
-              {message.id === STREAMING_ID && streaming ? (
-                <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-[var(--accent)] align-middle" />
-              ) : null}
-            </p>
+            {/* The writer's own words go through verbatim; Claude's are
+                Markdown and get rendered as such. */}
+            {message.role === 'user' ? (
+              <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                {message.content}
+              </p>
+            ) : (
+              <div className="text-sm leading-relaxed">
+                <Markdown source={message.content} />
+                {message.id === STREAMING_ID && streaming ? (
+                  <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-[var(--accent)] align-middle" />
+                ) : null}
+              </div>
+            )}
           </div>
         ))}
 

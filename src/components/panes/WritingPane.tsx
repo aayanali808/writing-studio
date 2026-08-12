@@ -1,10 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { EditorContent, useEditor } from '@tiptap/react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { CharacterCount, Placeholder } from '@tiptap/extensions';
 import { AskPopover, type AskState } from '@/components/editor/AskPopover';
+import { EditorToolbar } from '@/components/editor/EditorToolbar';
 import { readSelection } from '@/components/editor/editor-utils';
 import {
   SelectionToolbar,
@@ -12,13 +13,36 @@ import {
 } from '@/components/editor/SelectionToolbar';
 import { useStudio } from '@/components/studio/StudioContext';
 import { apiJson, apiStream } from '@/lib/client';
-import type { DocNode, EditorSelection, ResearchResult } from '@/types';
+import {
+  FONT_STACKS,
+  type DocNode,
+  type EditorSelection,
+  type OutlineItem,
+  type ResearchResult,
+  type Turn,
+} from '@/types';
 
 const ACTION_LABELS: Record<string, string> = {
   improve: 'Improve this',
   explain: 'Explain',
   custom: 'Your question',
 };
+
+/** Walks the top level of the document collecting headings for the Outline. */
+function readOutline(editor: Editor): OutlineItem[] {
+  const items: OutlineItem[] = [];
+
+  editor.state.doc.forEach((node, offset) => {
+    if (node.type.name !== 'heading') return;
+    items.push({
+      pos: offset,
+      level: Number(node.attrs.level) || 1,
+      text: node.textContent.trim(),
+    });
+  });
+
+  return items;
+}
 
 export function WritingPane({ initialContent }: { initialContent: DocNode }) {
   const {
@@ -31,6 +55,8 @@ export function WritingPane({ initialContent }: { initialContent: DocNode }) {
     setEditor,
     selection,
     setSelection,
+    setOutline,
+    typography,
     addResearch,
     setResearchBusy,
     focusPane,
@@ -40,6 +66,12 @@ export function WritingPane({ initialContent }: { initialContent: DocNode }) {
   const abortRef = useRef<AbortController | null>(null);
   const [ask, setAsk] = useState<AskState | null>(null);
 
+  // Follow-ups need the thread as it stands without making the handler depend
+  // on it — a state updater can't be used to read it, since React is free to
+  // run one twice and that would fire the request twice.
+  const askRef = useRef<AskState | null>(null);
+  askRef.current = ask;
+
   const editor = useEditor({
     // The studio server-renders first; TipTap must not touch the DOM until
     // it's on the client.
@@ -47,48 +79,52 @@ export function WritingPane({ initialContent }: { initialContent: DocNode }) {
     extensions: [
       StarterKit.configure({
         link: { openOnClick: false, autolink: true },
+        heading: { levels: [1, 2, 3] },
       }),
       Placeholder.configure({ placeholder: 'Start writing…' }),
       CharacterCount,
     ],
     content: initialContent,
     editorProps: {
-      attributes: { class: 'mx-auto w-full max-w-[46rem] px-8 py-10' },
+      attributes: { class: 'studio-measure mx-auto w-full px-8 py-10' },
     },
     onUpdate({ editor: instance }) {
       scheduleSave({ content: instance.getJSON() as DocNode });
+      setOutline(readOutline(instance));
     },
     onSelectionUpdate({ editor: instance }) {
       setSelection(readSelection(instance));
     },
   });
 
-  // Publish the instance so other panes — the ask popover, research citations —
-  // can write into the document.
+  // Publish the instance so other panes — the ask popover, the outline,
+  // research citations — can read and write the document.
   useEffect(() => {
     setEditor(editor ?? null);
     return () => setEditor(null);
   }, [editor, setEditor]);
 
+  // Seed the outline from the loaded draft. `onUpdate` only fires on edits, so
+  // without this a document opens with an empty Outline pane until you type.
+  useEffect(() => {
+    if (editor) setOutline(readOutline(editor));
+  }, [editor, setOutline]);
+
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const runAsk = useCallback(
-    async (
-      action: 'improve' | 'explain' | 'custom',
-      current: EditorSelection,
-      prompt?: string
-    ) => {
+  /**
+   * Streams one ask turn into the popover.
+   *
+   * `history` is everything already said in this thread; the opening user turn
+   * is rebuilt server-side from the selection, so it isn't sent.
+   */
+  const streamAsk = useCallback(
+    async (state: AskState, history: Turn[]) => {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
 
-      setAsk({
-        label: ACTION_LABELS[action] ?? 'Ask',
-        selection: current,
-        answer: '',
-        pending: true,
-        error: null,
-      });
+      setAsk({ ...state, pending: true, error: null });
 
       try {
         // The Context Bundle reads the draft from Postgres, so the pending
@@ -100,35 +136,81 @@ export function WritingPane({ initialContent }: { initialContent: DocNode }) {
           {
             method: 'POST',
             body: JSON.stringify({
-              action,
-              prompt,
-              selection: current.text,
-              surrounding: current.surrounding,
+              action: state.request.action,
+              prompt: state.request.prompt,
+              selection: state.selection.text,
+              surrounding: state.selection.surrounding,
+              history,
             }),
             signal: controller.signal,
           },
           (accumulated) =>
-            setAsk((state) =>
-              state ? { ...state, answer: accumulated } : state
-            )
+            setAsk((current) => {
+              if (!current) return current;
+              // The reply is always the last turn — replace it in place as it
+              // streams rather than appending.
+              const turns = [...current.turns];
+              turns[turns.length - 1] = { role: 'assistant', content: accumulated };
+              return { ...current, turns };
+            })
         );
 
-        setAsk((state) => (state ? { ...state, pending: false } : state));
+        setAsk((current) => (current ? { ...current, pending: false } : current));
       } catch (error) {
         if (controller.signal.aborted) return;
-        setAsk((state) =>
-          state
+        setAsk((current) =>
+          current
             ? {
-                ...state,
+                ...current,
                 pending: false,
                 error:
                   error instanceof Error ? error.message : 'The request failed',
               }
-            : state
+            : current
         );
       }
     },
     [documentId, flushSave]
+  );
+
+  const runAsk = useCallback(
+    (
+      action: 'improve' | 'explain' | 'custom',
+      current: EditorSelection,
+      prompt?: string
+    ) => {
+      void streamAsk(
+        {
+          label: ACTION_LABELS[action] ?? 'Ask',
+          selection: current,
+          request: { action, prompt },
+          turns: [{ role: 'assistant', content: '' }],
+          pending: true,
+          error: null,
+        },
+        []
+      );
+    },
+    [streamAsk]
+  );
+
+  /** Sends a written reply and opens a fresh assistant turn for the answer. */
+  const followUpAsk = useCallback(
+    (question: string) => {
+      const current = askRef.current;
+      if (!current || current.pending) return;
+
+      const history: Turn[] = [
+        ...current.turns,
+        { role: 'user', content: question },
+      ];
+
+      void streamAsk(
+        { ...current, turns: [...history, { role: 'assistant', content: '' }] },
+        history
+      );
+    },
+    [streamAsk]
   );
 
   const runResearch = useCallback(
@@ -136,11 +218,18 @@ export function WritingPane({ initialContent }: { initialContent: DocNode }) {
       setResearchBusy(true);
       focusPane('research');
 
+      const base = {
+        id: crypto.randomUUID(),
+        claim: current.text,
+        surrounding: current.surrounding,
+        pending: false,
+        createdAt: new Date().toISOString(),
+      };
+
       try {
         await flushSave();
 
         const result = await apiJson<{
-          claim: string;
           summary: string;
           sources: ResearchResult['sources'];
         }>(`/api/documents/${documentId}/research`, {
@@ -152,20 +241,18 @@ export function WritingPane({ initialContent }: { initialContent: DocNode }) {
         });
 
         addResearch({
-          ...result,
-          id: crypto.randomUUID(),
-          createdAt: new Date().toISOString(),
+          ...base,
+          turns: [{ role: 'assistant', content: result.summary }],
+          sources: result.sources,
+          error: null,
         });
       } catch (error) {
         addResearch({
-          id: crypto.randomUUID(),
-          claim: current.text,
-          summary:
-            error instanceof Error
-              ? `Research failed: ${error.message}`
-              : 'Research failed.',
+          ...base,
+          turns: [],
           sources: [],
-          createdAt: new Date().toISOString(),
+          error:
+            error instanceof Error ? error.message : 'The search failed.',
         });
       } finally {
         setResearchBusy(false);
@@ -183,15 +270,27 @@ export function WritingPane({ initialContent }: { initialContent: DocNode }) {
         return;
       }
       if (action.kind === 'custom') {
-        void runAsk('custom', selection, action.prompt);
+        runAsk('custom', selection, action.prompt);
         return;
       }
-      void runAsk(action.kind, selection);
+      runAsk(action.kind, selection);
     },
     [selection, runAsk, runResearch]
   );
 
   const words = editor?.storage.characterCount?.words?.() ?? 0;
+
+  // Display preferences reach the editor as custom properties so the rules in
+  // globals.css stay the single description of how the prose looks.
+  const surfaceStyle = useMemo(
+    () =>
+      ({
+        '--editor-font': FONT_STACKS[typography.family],
+        '--editor-size': `${typography.size}px`,
+        '--editor-measure': `${typography.width}rem`,
+      }) as React.CSSProperties,
+    [typography]
+  );
 
   return (
     <div className="flex h-full">
@@ -206,8 +305,11 @@ export function WritingPane({ initialContent }: { initialContent: DocNode }) {
           />
         </div>
 
+        {editor ? <EditorToolbar editor={editor} /> : null}
+
         <div
           ref={scrollRef}
+          style={surfaceStyle}
           className="studio-prose relative flex-1 overflow-y-auto"
         >
           <EditorContent editor={editor} />
@@ -231,7 +333,13 @@ export function WritingPane({ initialContent }: { initialContent: DocNode }) {
         </div>
       </div>
 
-      {ask ? <AskPopover state={ask} onClose={() => setAsk(null)} /> : null}
+      {ask ? (
+        <AskPopover
+          state={ask}
+          onFollowUp={followUpAsk}
+          onClose={() => setAsk(null)}
+        />
+      ) : null}
     </div>
   );
 }

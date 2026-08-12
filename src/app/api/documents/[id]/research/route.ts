@@ -2,6 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { requireSession } from '@/auth';
 import { EFFORT, MODEL, WEB_SEARCH_TOOL, getAnthropic } from '@/lib/anthropic';
 import { contextSystemPrompt } from '@/lib/context-bundle';
+import { readTurns } from '@/lib/turns';
 import type { ResearchSource } from '@/types';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -22,6 +23,11 @@ const DEADLINE_MS = 50_000;
  * Triggered from highlight-to-ask ("Find sources for this claim"). Claude runs
  * the searches server-side via its own web search tool — nothing is fetched
  * from here — and we pull the cited results out for the Research Results pane.
+ *
+ * The pane lets the writer reply to a verdict, so a request can carry the turns
+ * already exchanged; the opening turn is always rebuilt here from the claim
+ * rather than sent by the client (see `readTurns`). A follow-up may search
+ * again, and any new sources are merged into the same thread.
  */
 
 const RESEARCH_TASK = [
@@ -41,6 +47,11 @@ const RESEARCH_TASK = [
   'about the claim as written. Do not restate the claim back at them, do not',
   'list the sources again in prose (they are shown separately), and do not pad',
   'with caveats about search limitations.',
+  '',
+  'The writer can reply to you. Treat a follow-up as a question about the',
+  'evidence you just gave them: search again if answering it needs a source you',
+  'do not already have, and otherwise just answer from what you found. The same',
+  'short clock and the same brevity apply to every turn.',
 ].join('\n');
 
 /**
@@ -117,6 +128,7 @@ export async function POST(request: Request, { params }: RouteContext) {
         surrounding || '(No surrounding context was captured.)',
       ].join('\n'),
     },
+    ...readTurns(body?.history),
   ];
 
   const startedAt = Date.now();
@@ -193,11 +205,13 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
-    if (ranOutOfTime && sources.length === 0) {
+    if (ranOutOfTime && sources.length === 0 && !summary) {
       return Response.json(
         {
           error:
-            'The search ran out of time before finding anything. Try highlighting a shorter, more specific claim.',
+            messages.length > 1
+              ? 'That follow-up ran out of time. Try asking something narrower.'
+              : 'The search ran out of time before finding anything. Try highlighting a shorter, more specific claim.',
         },
         { status: 504 }
       );

@@ -45,6 +45,26 @@ because the Neon integration provisions an *empty* database and the first deploy
 therefore a build dependency on Vercel — intended, so a bad deploy fails rather
 than shipping a broken app. Local `npm run build` is unaffected.
 
+**Markdown is parsed here, not rendered by a library.** `src/lib/markdown.ts`
+produces an AST with two renderers — `<Markdown>` for the panes and
+`markdownToDoc()` for TipTap. A markdown-to-HTML dependency would only have
+solved the display half, and Replace/Insert would still have been dropping
+literal `**asterisks**` into the draft. Parsing once means the two can't
+disagree. It also never produces HTML from source text, so there is no
+`dangerouslySetInnerHTML` and no sanitiser to keep current.
+
+**AI outputs are threads, not answers.** The ask popover and research pane both
+accept a written reply. The opening user turn is *always* rebuilt server-side
+from the highlighted passage — the client sends only what came after it, as
+`[assistant, user, …]` (`src/lib/turns.ts`). That keeps the prompt under our
+control and means a malformed thread can't smuggle instructions in.
+
+**Typography is a localStorage preference, not document data.** It's how this
+screen should look, not a property of the piece, so it doesn't touch Postgres.
+It's a `useSyncExternalStore` source rather than state seeded from an effect,
+which is both what React wants for external state and what the
+`react-hooks/set-state-in-effect` rule requires.
+
 ## Invariants worth not breaking
 
 **The Context Bundle is assembled server-side from Postgres**, never from the
@@ -62,10 +82,15 @@ return `content: ''` and the cache layer preserves existing text on empty.
 node mid-paragraph makes ProseMirror split around it, which orphaned the rest of
 the paragraph. See `replaceRange` in `src/components/editor/editor-utils.ts`.
 
+**The Outline is derived in the Writing pane**, not recomputed in the Outline
+pane, because that is the one place that already knows when the document
+changed. `readOutline` runs in `onUpdate` *and* once when the editor mounts —
+without the second call a document opens with an empty Outline until you type.
+
 ## Known, not yet fixed
 
-- The research verdict renders raw markdown (`## heading`, `**bold**`) as literal
-  text in the Research Results pane. Either tighten the prompt or render markdown.
+- Adding the Outline pane changed only the *default* layout. Documents with a
+  saved layout won't show it until you pick it from **Panes ▾** or reset.
 - Insert-citation writes at the editor cursor, so it needs the Writing pane
   visible; by default it's tabbed with Research Results, which hides one behind
   the other.
@@ -73,3 +98,6 @@ the paragraph. See `replaceRange` in `src/components/editor/editor-utils.ts`.
   before stable, and sets no `cache_control`. Reordering to put pinned sources
   first and adding a cache breakpoint would cut input cost ~20–30% when sources
   are pinned. Sonnet 5's cache minimum is 1024 tokens.
+- The Markdown parser handles the subset Claude writes in prose feedback.
+  Tables render in the panes but flatten to one paragraph per row when inserted
+  into the draft, since StarterKit has no table nodes.
