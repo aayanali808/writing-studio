@@ -75,9 +75,14 @@ those three `AUTH_*` variables.
 1. Push this repo to GitHub and import it at vercel.com/new.
 2. Add all the environment variables above under **Settings → Environment
    Variables** (Production, Preview, and Development).
-3. Run `npm run db:migrate` once against the production `DATABASE_URL`, or paste
-   `src/lib/schema.sql` into the Neon/Supabase SQL editor.
-4. Deploy.
+3. Deploy. The schema applies itself — `vercel-build` runs `scripts/migrate.mjs`
+   before `next build`, and Vercel prefers that script over `build` when it
+   exists. The schema is `CREATE ... IF NOT EXISTS` throughout, so it re-runs
+   harmlessly on every deploy and any table you add later ships with the code.
+
+A connected database is therefore a build dependency on Vercel: if Neon is
+unreachable the deploy fails rather than shipping an app that 500s on its first
+page. Local `npm run build` is untouched and needs no database.
 
 **Function timeouts.** The AI routes set `maxDuration = 60`, which is the
 ceiling on Vercel's Hobby plan. The research agent is the one that can approach
