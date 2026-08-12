@@ -65,7 +65,16 @@ function clamp(editor: Editor, position: number): number {
   return Math.max(0, Math.min(position, editor.state.doc.content.size));
 }
 
-/** Swaps the original selection for the answer. */
+/**
+ * Swaps the original selection for the answer.
+ *
+ * Single-paragraph answers are inserted as inline text rather than as a
+ * paragraph node. Inserting a block node mid-paragraph makes ProseMirror split
+ * the paragraph around it, so rewriting one sentence used to leave the rest of
+ * its paragraph orphaned below — which is not what "replace this sentence"
+ * should do. Multi-paragraph answers still come through as blocks, since there
+ * the split is the point.
+ */
 export function replaceRange(
   editor: Editor,
   selection: EditorSelection,
@@ -73,8 +82,16 @@ export function replaceRange(
 ): void {
   const from = clamp(editor, selection.from);
   const to = clamp(editor, selection.to);
+  const trimmed = text.trim();
 
-  editor.chain().focus().insertContentAt({ from, to }, toParagraphs(text)).run();
+  const isMultiParagraph = /\n{2,}/.test(trimmed);
+  const spansBlocks =
+    editor.state.doc.resolve(from).parent !== editor.state.doc.resolve(to).parent;
+
+  const content =
+    isMultiParagraph || spansBlocks ? toParagraphs(trimmed) : trimmed;
+
+  editor.chain().focus().insertContentAt({ from, to }, content).run();
 }
 
 /** Adds the answer as a new paragraph after the selection, leaving it intact. */

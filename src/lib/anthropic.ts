@@ -40,8 +40,13 @@ export const EFFORT = {
   ASK: 'medium',
   /** Chat. Analytical, but still a side panel. */
   CHAT: 'medium',
-  /** Research. Judging evidence against a claim — the highest-stakes call. */
-  RESEARCH: 'high',
+  /**
+   * Research. Judging evidence against a claim is the highest-stakes call, but
+   * it also runs several web searches inside one 60s Vercel function, and
+   * 'high' reliably blew that ceiling in testing. 'medium' lands well inside it.
+   * Raise to 'high' if you move to a plan with a longer function timeout.
+   */
+  RESEARCH: 'medium',
 } as const;
 
 /**
@@ -56,5 +61,7 @@ export const EFFORT = {
 export const WEB_SEARCH_TOOL = {
   type: 'web_search_20260209' as const,
   name: 'web_search' as const,
-  max_uses: 6,
+  // Each search costs wall-clock inside a 60s function. Four is enough to
+  // triangulate a claim; six pushed past the ceiling in testing.
+  max_uses: 4,
 };

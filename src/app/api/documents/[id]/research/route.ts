@@ -6,20 +6,22 @@ import type { ResearchSource } from '@/types';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-/**
- * A multi-search turn is the slowest thing in the app. 60s is the ceiling on
- * Vercel's Hobby plan; on Pro this can go to 300. If searches start getting cut
- * off, raise this first, then drop `effort` to 'medium' below.
- */
+/** 60s is the ceiling on Vercel's Hobby plan; Pro allows up to 300. */
 export const maxDuration = 60;
+
+/**
+ * Our own deadline, set below `maxDuration` so we can stop deliberately and
+ * return what we have. Past this point the platform kills the function and the
+ * browser gets a bare 504 — every search already paid for, thrown away.
+ */
+const DEADLINE_MS = 50_000;
 
 /**
  * The research agent.
  *
  * Triggered from highlight-to-ask ("Find sources for this claim"). Claude runs
  * the searches server-side via its own web search tool — nothing is fetched
- * from here — and we pull the cited results out of the response for the
- * Research Results pane.
+ * from here — and we pull the cited results out for the Research Results pane.
  */
 
 const RESEARCH_TASK = [
@@ -43,28 +45,33 @@ const RESEARCH_TASK = [
  */
 const MAX_CONTINUATIONS = 3;
 
-function extractSources(content: Anthropic.ContentBlock[]): ResearchSource[] {
-  const sources: ResearchSource[] = [];
-  const seen = new Set<string>();
-
-  for (const block of content) {
-    if (block.type !== 'web_search_tool_result') continue;
-
-    // On an error the API returns a single error object here rather than a list.
-    if (!Array.isArray(block.content)) continue;
-
-    for (const result of block.content) {
-      if (result.type !== 'web_search_result' || seen.has(result.url)) continue;
-      seen.add(result.url);
-      sources.push({
-        title: result.title || result.url,
-        url: result.url,
-        snippet: '',
-      });
-    }
+/** Harvests search results out of one completed content block. */
+function collectSources(
+  block: Anthropic.ContentBlock,
+  into: ResearchSource[],
+  seen: Set<string>
+): void {
+  if (block.type !== 'web_search_tool_result' || !Array.isArray(block.content)) {
+    return;
   }
 
-  return sources;
+  for (const result of block.content) {
+    if (result.type !== 'web_search_result' || seen.has(result.url)) continue;
+    seen.add(result.url);
+    into.push({ title: result.title || result.url, url: result.url, snippet: '' });
+  }
+}
+
+/** Surfaces a failed search rather than swallowing it. */
+function readSearchError(block: Anthropic.ContentBlock): string | null {
+  if (block.type !== 'web_search_tool_result') return null;
+  if (
+    !Array.isArray(block.content) &&
+    block.content?.type === 'web_search_tool_result_error'
+  ) {
+    return block.content.error_code;
+  }
+  return null;
 }
 
 function extractText(content: Anthropic.ContentBlock[]): string {
@@ -73,17 +80,6 @@ function extractText(content: Anthropic.ContentBlock[]): string {
     .map((block) => block.text)
     .join('')
     .trim();
-}
-
-/** Surfaces a failed search as a message rather than swallowing it. */
-function extractSearchError(content: Anthropic.ContentBlock[]): string | null {
-  for (const block of content) {
-    if (block.type !== 'web_search_tool_result') continue;
-    if (!Array.isArray(block.content) && block.content?.type === 'web_search_tool_result_error') {
-      return block.content.error_code;
-    }
-  }
-  return null;
 }
 
 export async function POST(request: Request, { params }: RouteContext) {
@@ -119,15 +115,24 @@ export async function POST(request: Request, { params }: RouteContext) {
     },
   ];
 
+  const startedAt = Date.now();
+  const remaining = () => DEADLINE_MS - (Date.now() - startedAt);
+
+  const sources: ResearchSource[] = [];
+  const seenUrls = new Set<string>();
+  let summary = '';
+  let searchError: string | null = null;
+  let ranOutOfTime = false;
+
   try {
     const anthropic = getAnthropic();
-    const allSources: ResearchSource[] = [];
-    let summary = '';
-    let searchError: string | null = null;
 
     for (let attempt = 0; attempt <= MAX_CONTINUATIONS; attempt += 1) {
-      // Streamed so a long multi-search turn can't hit the request timeout,
-      // even though the client is given a single JSON response at the end.
+      if (remaining() <= 0) {
+        ranOutOfTime = true;
+        break;
+      }
+
       const stream = anthropic.messages.stream({
         model: MODEL,
         max_tokens: 32_000,
@@ -138,10 +143,28 @@ export async function POST(request: Request, { params }: RouteContext) {
         messages,
       });
 
-      const response = await stream.finalMessage();
+      // Harvest results as each block completes, so aborting at the deadline
+      // still leaves us with whatever Claude had already found.
+      stream.on('contentBlock', (block) => {
+        collectSources(block, sources, seenUrls);
+        searchError ??= readSearchError(block);
+      });
 
-      allSources.push(...extractSources(response.content));
-      searchError ??= extractSearchError(response.content);
+      const guard = setTimeout(() => stream.abort(), Math.max(remaining(), 0));
+
+      let response: Anthropic.Message;
+      try {
+        response = await stream.finalMessage();
+      } catch (error) {
+        if (stream.aborted) {
+          ranOutOfTime = true;
+          break;
+        }
+        throw error;
+      } finally {
+        clearTimeout(guard);
+      }
+
       summary = extractText(response.content) || summary;
 
       if (response.stop_reason === 'refusal') {
@@ -156,14 +179,7 @@ export async function POST(request: Request, { params }: RouteContext) {
       messages.push({ role: 'assistant', content: response.content });
     }
 
-    // De-duplicate across continuations.
-    const seen = new Set<string>();
-    const sources = allSources.filter((source) => {
-      if (seen.has(source.url)) return false;
-      seen.add(source.url);
-      return true;
-    });
-
+    // A search that failed outright and produced nothing is a real error.
     if (searchError && sources.length === 0) {
       return Response.json(
         { error: `Web search failed (${searchError}).` },
@@ -171,9 +187,25 @@ export async function POST(request: Request, { params }: RouteContext) {
       );
     }
 
+    if (ranOutOfTime && sources.length === 0) {
+      return Response.json(
+        {
+          error:
+            'The search ran out of time before finding anything. Try highlighting a shorter, more specific claim.',
+        },
+        { status: 504 }
+      );
+    }
+
     return Response.json({
       claim,
-      summary,
+      summary: ranOutOfTime
+        ? [
+            summary,
+            summary ? '\n\n' : '',
+            '(Stopped early at the time limit — these are the sources found so far.)',
+          ].join('')
+        : summary,
       sources,
     });
   } catch (error) {
