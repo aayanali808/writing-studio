@@ -31,7 +31,14 @@ export default async function StudioPage({
   );
 
   return (
-    <StudioProvider document={document} initialGoals={goals?.content ?? ''}>
+    // Keyed on the document so switching pieces rebuilds the whole studio.
+    // Draft, goals, and layout are all per-document server state; without the
+    // key they would keep the previous piece's initial values.
+    <StudioProvider
+      key={document.id}
+      document={document}
+      initialGoals={goals?.content ?? ''}
+    >
       <main className="h-screen overflow-hidden">
         <Workspace initialContent={document.content ?? EMPTY_DOC} />
       </main>

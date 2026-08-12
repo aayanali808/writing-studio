@@ -15,6 +15,7 @@ import { OutlinePane } from '@/components/panes/OutlinePane';
 import { ResearchPane } from '@/components/panes/ResearchPane';
 import { SourcesPane } from '@/components/panes/SourcesPane';
 import { WritingPane } from '@/components/panes/WritingPane';
+import { DocumentMenu } from '@/components/studio/DocumentMenu';
 import { useStudio } from '@/components/studio/StudioContext';
 import { apiJson } from '@/lib/client';
 import { PANE_TITLES, type DocNode, type PaneId } from '@/types';
@@ -241,13 +242,13 @@ function WorkspaceToolbar({
   onAddPane: (paneId: PaneId) => void;
   onReset: () => void;
 }) {
-  const { title, saveStatus } = useStudio();
+  const { saveStatus } = useStudio();
   const [open, setOpen] = useState(false);
 
   return (
     <header className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--bg-inset)] px-3 py-1.5">
       <div className="flex min-w-0 items-baseline gap-2">
-        <span className="truncate text-xs font-medium">{title || 'Untitled'}</span>
+        <DocumentMenu />
         <span className="shrink-0 text-[10px] text-[var(--text-faint)]">
           {saveStatus === 'saving'
             ? 'saving…'

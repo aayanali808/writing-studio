@@ -48,6 +48,139 @@ export function docToPlainText(doc: DocNode | null | undefined): string {
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+// --- Markdown out -----------------------------------------------------------
+
+/**
+ * Serialises a TipTap document to Markdown.
+ *
+ * The exact inverse of `markdownToDoc` in `lib/markdown.ts`, and deliberately
+ * limited to the same node set: what this writes, that can read back. Export is
+ * the point — a piece shouldn't only exist inside this app's database.
+ */
+
+/** Characters that would otherwise be read back as markup. */
+function escapeInline(text: string): string {
+  return text.replace(/([\\`*[\]])/g, '\\$1');
+}
+
+/** A paragraph opening with a marker character would parse as another block. */
+function escapeLineStart(text: string): string {
+  return text.replace(/^(\s*)(#{1,6}\s|[-*+]\s|>\s|\d{1,9}[.)]\s)/, '$1\\$2');
+}
+
+const MARK_WRAPPERS: Record<string, string> = {
+  bold: '**',
+  italic: '*',
+  strike: '~~',
+};
+
+function inlineToMarkdown(nodes: DocNode[] | undefined): string {
+  if (!nodes) return '';
+
+  return nodes
+    .map((node) => {
+      if (node.type === 'hardBreak') return '  \n';
+      if (node.type !== 'text' || !node.text) return '';
+
+      const marks = node.marks ?? [];
+
+      // Code is innermost: its content is literal, so escaping would show up
+      // verbatim inside the backticks.
+      const isCode = marks.some((mark) => mark.type === 'code');
+      let text = isCode ? `\`${node.text}\`` : escapeInline(node.text);
+
+      for (const mark of marks) {
+        const wrapper = MARK_WRAPPERS[mark.type];
+        if (wrapper) text = `${wrapper}${text}${wrapper}`;
+      }
+
+      // A link wraps everything else.
+      const link = marks.find((mark) => mark.type === 'link');
+      if (link) {
+        const href = String(link.attrs?.href ?? '');
+        if (href) text = `[${text}](${href})`;
+      }
+
+      return text;
+    })
+    .join('');
+}
+
+function blockToMarkdown(node: DocNode): string[] {
+  switch (node.type) {
+    case 'heading': {
+      const level = Math.min(Math.max(Number(node.attrs?.level) || 1, 1), 6);
+      return [`${'#'.repeat(level)} ${inlineToMarkdown(node.content)}`];
+    }
+
+    case 'paragraph':
+      return [escapeLineStart(inlineToMarkdown(node.content))];
+
+    case 'codeBlock': {
+      const language = node.attrs?.language ? String(node.attrs.language) : '';
+      const body = (node.content ?? []).map((child) => child.text ?? '').join('');
+      return [`\`\`\`${language}`, ...body.split('\n'), '```'];
+    }
+
+    case 'blockquote':
+      return blocksToMarkdown(node.content, '').map((line) =>
+        line ? `> ${line}` : '>'
+      );
+
+    case 'horizontalRule':
+      return ['---'];
+
+    case 'bulletList':
+    case 'orderedList': {
+      const ordered = node.type === 'orderedList';
+      const start = Number(node.attrs?.start) || 1;
+      const lines: string[] = [];
+
+      (node.content ?? []).forEach((item, index) => {
+        const marker = ordered ? `${start + index}. ` : '- ';
+        // Continuation lines are indented to the marker's own width, which is
+        // exactly what the reader treats as belonging to the item.
+        const body = blocksToMarkdown(item.content, ' '.repeat(marker.length));
+
+        body.forEach((line, lineIndex) => {
+          if (lineIndex === 0) {
+            lines.push(marker + line.trimStart());
+          } else {
+            lines.push(line);
+          }
+        });
+      });
+
+      return lines;
+    }
+
+    // listItem is handled by its parent; anything unknown falls back to text.
+    default:
+      return node.content ? blocksToMarkdown(node.content, '') : [];
+  }
+}
+
+function blocksToMarkdown(
+  nodes: DocNode[] | undefined,
+  indent: string
+): string[] {
+  const out: string[] = [];
+
+  (nodes ?? []).forEach((node, index) => {
+    if (index > 0) out.push('');
+    for (const line of blockToMarkdown(node)) {
+      out.push(line ? indent + line : '');
+    }
+  });
+
+  return out;
+}
+
+export function docToMarkdown(doc: DocNode | null | undefined): string {
+  if (!doc) return '';
+  return blocksToMarkdown(doc.content, '').join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 /** Rough word count, used for the writing pane's status line. */
 export function countWords(text: string): number {
   const trimmed = text.trim();
