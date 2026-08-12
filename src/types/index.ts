@@ -128,6 +128,37 @@ export interface OutlineItem {
   text: string;
 }
 
+/** A custom ask kept for reuse in the selection toolbar. */
+export interface SavedPrompt {
+  /** Chip-sized name. */
+  label: string;
+  prompt: string;
+}
+
+/**
+ * What the toolbar offers before you've saved anything of your own.
+ *
+ * Three asks that recur in editing prose and that the fixed Improve / Explain
+ * buttons don't cover. They can be deleted like any other.
+ */
+export const DEFAULT_PROMPTS: SavedPrompt[] = [
+  {
+    label: 'Cut a third',
+    prompt:
+      'Cut this by about a third without losing the argument or the voice. Reply with the shortened passage only.',
+  },
+  {
+    label: 'Make concrete',
+    prompt:
+      'Replace the abstractions here with specifics — name things, use figures, give an example. Reply with the rewritten passage only.',
+  },
+  {
+    label: 'What is weak',
+    prompt:
+      'What is the weakest part of this passage — the claim a sceptical reader would push back on first, and why?',
+  },
+];
+
 /** Reading preferences for the editor surface. Not part of the document. */
 export interface Typography {
   family: 'serif' | 'sans' | 'mono';
@@ -135,6 +166,8 @@ export interface Typography {
   size: number;
   /** Measure — the max line length, in rem. */
   width: number;
+  /** Dims everything but the block the cursor is in. */
+  focus: boolean;
 }
 
 /** Matches what the editor looked like before the font menu existed. */
@@ -142,6 +175,7 @@ export const DEFAULT_TYPOGRAPHY: Typography = {
   family: 'sans',
   size: 17,
   width: 46,
+  focus: false,
 };
 
 export const FONT_STACKS: Record<Typography['family'], string> = {

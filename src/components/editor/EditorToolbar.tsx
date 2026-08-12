@@ -158,6 +158,13 @@ export function EditorToolbar({ editor }: { editor: Editor }) {
           title="Line width"
           className="w-[5.25rem]"
         />
+        <MarkButton
+          active={typography.focus}
+          onClick={() => setTypography({ focus: !typography.focus })}
+          title="Focus mode — dim everything but the paragraph you're in"
+        >
+          ◉
+        </MarkButton>
       </div>
     </div>
   );

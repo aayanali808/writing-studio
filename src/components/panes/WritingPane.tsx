@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { CharacterCount, Placeholder } from '@tiptap/extensions';
+import { CharacterCount, Focus, Placeholder } from '@tiptap/extensions';
 import { AskPopover, type AskState } from '@/components/editor/AskPopover';
 import { EditorToolbar } from '@/components/editor/EditorToolbar';
 import { readSelection } from '@/components/editor/editor-utils';
@@ -82,6 +82,10 @@ export function WritingPane({ initialContent }: { initialContent: DocNode }) {
         heading: { levels: [1, 2, 3] },
       }),
       Placeholder.configure({ placeholder: 'Start writing…' }),
+      // Marks the block the cursor is in. Focus mode dims the rest in CSS;
+      // 'shallowest' keeps the mark on the top-level block rather than on a
+      // list item deep inside one.
+      Focus.configure({ className: 'has-focus', mode: 'shallowest' }),
       CharacterCount,
     ],
     content: initialContent,
@@ -310,7 +314,9 @@ export function WritingPane({ initialContent }: { initialContent: DocNode }) {
         <div
           ref={scrollRef}
           style={surfaceStyle}
-          className="studio-prose relative flex-1 overflow-y-auto"
+          className={`studio-prose relative flex-1 overflow-y-auto ${
+            typography.focus ? 'is-focus-mode' : ''
+          }`}
         >
           <EditorContent editor={editor} />
 

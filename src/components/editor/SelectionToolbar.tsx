@@ -1,7 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { Editor } from '@tiptap/react';
+import {
+  deletePrompt,
+  getPrompts,
+  getServerPrompts,
+  savePrompt,
+  subscribePrompts,
+} from '@/lib/prompt-store';
 import type { EditorSelection } from '@/types';
 
 export type ToolbarAction =
@@ -33,6 +40,12 @@ export function SelectionToolbar({
   const [asking, setAsking] = useState(false);
   const [prompt, setPrompt] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const prompts = useSyncExternalStore(
+    subscribePrompts,
+    getPrompts,
+    getServerPrompts
+  );
 
   useEffect(() => {
     const container = containerRef.current;
@@ -76,9 +89,11 @@ export function SelectionToolbar({
 
   if (!position) return null;
 
-  const submitCustom = () => {
+  const submitCustom = (keep: boolean) => {
     const trimmed = prompt.trim();
     if (!trimmed) return;
+    // Shift-Enter keeps the ask around as a chip for next time.
+    if (keep) savePrompt(trimmed);
     onAction({ kind: 'custom', prompt: trimmed });
     setAsking(false);
     setPrompt('');
@@ -91,27 +106,61 @@ export function SelectionToolbar({
       // Keep the editor selection alive when the toolbar is clicked.
       onMouseDown={(event) => event.preventDefault()}
     >
-      <div className="flex items-center gap-0.5 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-raised)] p-1 shadow-xl">
+      <div className="flex flex-col gap-1 rounded-lg border border-[var(--border-strong)] bg-[var(--bg-raised)] p-1 shadow-xl">
         {asking ? (
           <>
-            <input
-              ref={inputRef}
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  submitCustom();
-                }
-                if (event.key === 'Escape') setAsking(false);
-              }}
-              placeholder="Ask about this…"
-              className="w-64 bg-transparent px-2 py-1 text-sm outline-none placeholder:text-[var(--text-faint)]"
-            />
-            <ToolbarButton onClick={submitCustom}>Send</ToolbarButton>
+            <div className="flex items-center gap-0.5">
+              <input
+                ref={inputRef}
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    submitCustom(event.shiftKey);
+                  }
+                  if (event.key === 'Escape') setAsking(false);
+                }}
+                placeholder="Ask about this…  (⇧⏎ to save it too)"
+                className="w-72 bg-transparent px-2 py-1 text-sm outline-none placeholder:text-[var(--text-faint)]"
+              />
+              <ToolbarButton onClick={() => submitCustom(false)}>Send</ToolbarButton>
+            </div>
+
+            {/* Saved asks. Clicking one sends it; ⇧⏎ above saves a new one. */}
+            {prompts.length ? (
+              <div className="flex max-w-[22rem] flex-wrap gap-1 border-t border-[var(--border)] px-1 pb-0.5 pt-1.5">
+                {prompts.map((saved) => (
+                  <span
+                    key={saved.prompt}
+                    className="group/chip flex items-center rounded border border-[var(--border-strong)] text-[11px]"
+                  >
+                    <button
+                      type="button"
+                      title={saved.prompt}
+                      onClick={() => {
+                        onAction({ kind: 'custom', prompt: saved.prompt });
+                        setAsking(false);
+                      }}
+                      className="px-1.5 py-0.5 text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
+                    >
+                      {saved.label}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Forget "${saved.label}"`}
+                      onClick={() => deletePrompt(saved.prompt)}
+                      className="px-1 text-[var(--text-faint)] opacity-0 transition-opacity hover:text-[var(--danger)] focus:opacity-100 group-hover/chip:opacity-100"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </>
         ) : (
-          <>
+          <div className="flex items-center gap-0.5">
             <ToolbarButton onClick={() => onAction({ kind: 'improve' })}>
               Improve
             </ToolbarButton>
@@ -123,7 +172,7 @@ export function SelectionToolbar({
             </ToolbarButton>
             <span className="mx-0.5 h-4 w-px bg-[var(--border-strong)]" />
             <ToolbarButton onClick={() => setAsking(true)}>Ask…</ToolbarButton>
-          </>
+          </div>
         )}
       </div>
     </div>

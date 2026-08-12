@@ -193,6 +193,18 @@ body {
   pointer-events: none;
 }
 
+/*
+ * Focus mode: everything but the block you're in recedes.
+ *
+ * Guarded by `:has(.has-focus)` because TipTap only marks the active block
+ * while the editor itself has focus — without the guard, clicking away would
+ * dim the entire draft at once.
+ */
+.studio-prose.is-focus-mode .ProseMirror:has(.has-focus) > *:not(.has-focus) {
+  opacity: 0.28;
+  transition: opacity 180ms ease-out;
+}
+
 /* Selection stays visible while the floating ask toolbar has focus. */
 .studio-prose .ProseMirror .selection-preserved {
   background: var(--accent-soft);
