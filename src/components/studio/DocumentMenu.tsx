@@ -24,6 +24,8 @@ export function DocumentMenu() {
   const [documents, setDocuments] = useState<DocumentSummary[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The piece whose delete button is awaiting a second click. */
+  const [confirming, setConfirming] = useState<string | null>(null);
 
   const toggle = useCallback(async () => {
     if (open) {
@@ -33,6 +35,7 @@ export function DocumentMenu() {
 
     setOpen(true);
     setError(null);
+    setConfirming(null);
 
     // Re-read every time: titles change as you type, and this is the only
     // place that shows them.
@@ -74,6 +77,43 @@ export function DocumentMenu() {
       setBusy(false);
     }
   }, [flushSave, router]);
+
+  /**
+   * Deletes a piece — the draft, its versions, notes, goals, chat, pins, and
+   * layout, all of which cascade from the row.
+   *
+   * Two clicks rather than a `confirm()`: this is unrecoverable, and a native
+   * dialog would be both a jarring stop and the only modal in the app. The
+   * button turning into "Delete?" says the same thing in place.
+   */
+  const removeDocument = useCallback(
+    async (id: string) => {
+      setBusy(true);
+      setError(null);
+
+      try {
+        await apiJson(`/api/documents/${id}`, { method: 'DELETE' });
+        setDocuments((current) =>
+          current ? current.filter((entry) => entry.id !== id) : current
+        );
+        setConfirming(null);
+
+        // Deleting the piece you're looking at leaves nothing to look at, so
+        // hand back to /studio, which opens the most recent survivor — or
+        // creates a fresh piece if that was the last one.
+        if (id === documentId) {
+          setOpen(false);
+          router.push('/studio');
+          router.refresh();
+        }
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : 'Could not delete');
+      } finally {
+        setBusy(false);
+      }
+    },
+    [documentId, router]
+  );
 
   const exportMarkdown = useCallback(async () => {
     setBusy(true);
@@ -131,21 +171,47 @@ export function DocumentMenu() {
               ) : null}
 
               {documents?.map((entry) => (
-                <button
+                <div
                   key={entry.id}
-                  type="button"
-                  onClick={() => void openDocument(entry.id)}
-                  className={`flex w-full items-baseline justify-between gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-[var(--accent-soft)] ${
-                    entry.id === documentId
-                      ? 'text-[var(--accent)]'
-                      : 'text-[var(--text-muted)] hover:text-[var(--text)]'
-                  }`}
+                  className="group flex items-baseline transition-colors hover:bg-[var(--accent-soft)]"
                 >
-                  <span className="truncate">{entry.title || 'Untitled'}</span>
-                  <span className="shrink-0 text-[10px] text-[var(--text-faint)]">
-                    {relativeTime(entry.updated_at)}
-                  </span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => void openDocument(entry.id)}
+                    className={`flex min-w-0 flex-1 items-baseline justify-between gap-2 py-1.5 pl-3 text-left text-xs ${
+                      entry.id === documentId
+                        ? 'text-[var(--accent)]'
+                        : 'text-[var(--text-muted)] group-hover:text-[var(--text)]'
+                    }`}
+                  >
+                    <span className="truncate">{entry.title || 'Untitled'}</span>
+                    <span className="shrink-0 text-[10px] text-[var(--text-faint)]">
+                      {relativeTime(entry.updated_at)}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={busy}
+                    aria-label={
+                      confirming === entry.id
+                        ? `Confirm deleting "${entry.title || 'Untitled'}"`
+                        : `Delete "${entry.title || 'Untitled'}"`
+                    }
+                    onClick={() =>
+                      confirming === entry.id
+                        ? void removeDocument(entry.id)
+                        : setConfirming(entry.id)
+                    }
+                    className={`shrink-0 py-1.5 pl-2 pr-3 text-[10px] transition-all disabled:opacity-40 ${
+                      confirming === entry.id
+                        ? 'font-medium text-[var(--danger)]'
+                        : 'text-[var(--text-faint)] opacity-0 hover:text-[var(--danger)] focus:opacity-100 group-hover:opacity-100'
+                    }`}
+                  >
+                    {confirming === entry.id ? 'Delete?' : '✕'}
+                  </button>
+                </div>
               ))}
             </div>
 
