@@ -59,6 +59,28 @@ from the highlighted passage — the client sends only what came after it, as
 `[assistant, user, …]` (`src/lib/turns.ts`). That keeps the prompt under our
 control and means a malformed thread can't smuggle instructions in.
 
+**Snapshots record the state *before* a change, not after.** That's what makes
+restore mean "put it back" (`src/lib/versions.ts`). Autosave snapshots are
+rate-limited to one per fifteen quiet minutes — the 800ms debounce would
+otherwise write thousands of near-identical rows a session — and the risky
+moments are covered explicitly instead: before any AI answer is applied, and
+before a restore, so the restore is itself undoable.
+
+**Comments anchor with a mark, never a position.** ProseMirror maps marks
+through every edit, so a note stays on its sentence as you rewrite around it.
+A note whose text is deleted becomes an orphan and stays in the pane rather
+than vanishing with the sentence — the note is usually the more valuable half.
+
+**Google Drive and Notion both use a machine identity, not OAuth.** You share
+files with an account that can read those and nothing else. No redirect URI, no
+consent screen, no refresh tokens to store and rotate — for one person's own
+files in a single-user app, OAuth is all cost.
+
+**The web provider fetches URLs the browser supplied**, so `normaliseUrl`
+rejects anything that isn't public http(s) — localhost, `.internal`, and the
+literal private and link-local ranges including 169.254.169.254. DNS names that
+resolve into those ranges are *not* caught; that needs address pinning.
+
 **Typography is a localStorage preference, not document data.** It's how this
 screen should look, not a property of the piece, so it doesn't touch Postgres.
 It's a `useSyncExternalStore` source rather than state seeded from an effect,
@@ -89,8 +111,14 @@ without the second call a document opens with an empty Outline until you type.
 
 ## Known, not yet fixed
 
-- Adding the Outline pane changed only the *default* layout. Documents with a
-  saved layout won't show it until you pick it from **Panes ▾** or reset.
+- **The Google Drive provider has never run against a real account.** It needs
+  `GOOGLE_SERVICE_ACCOUNT_JSON`, which hasn't been set. It typechecks and
+  builds, and is inert without the variable — `isConfigured()` returns false
+  and `getConfiguredProviders()` skips it. Treat the first successful `list()`
+  as the real test.
+- Adding a pane changes only the *default* layout. Documents with a saved
+  layout won't show Outline, Versions, or Comments until you pick them from
+  **Panes ▾** or reset the layout.
 - Insert-citation writes at the editor cursor, so it needs the Writing pane
   visible; by default it's tabbed with Research Results, which hides one behind
   the other.

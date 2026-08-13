@@ -15,9 +15,9 @@ reopen — not a fixed three-column layout. The arrangement is saved per documen
 | **Versions** | Restore points, taken automatically and before every AI edit you apply. |
 | **Comments** | Notes to yourself, anchored to a passage. No AI involved. |
 | **AI Chat** | Conversation about the piece. Every turn carries the Context Bundle. |
-| **Sources** | Read-only external material (Notion today), pinnable into the Context Bundle. |
+| **Sources** | Read-only external material — Notion, Google Drive, or any web page — pinnable into the Context Bundle. |
 | **Goals** | Free-text goals for the piece — audience, argument, constraints, tone. |
-| **Research Results** | Web sources found by the research agent, insertable as citations. |
+| **Research Results** | Web sources found by the research agent, insertable as citations or pinnable as sources. |
 
 Every pane showing Claude's output renders its Markdown, and every one of them
 is a conversation — you can reply to an ask, and you can question a research
@@ -96,13 +96,12 @@ A connected database is therefore a build dependency on Vercel: if Neon is
 unreachable the deploy fails rather than shipping an app that 500s on its first
 page. Local `npm run build` is untouched and needs no database.
 
-**Function timeouts.** The AI routes set `maxDuration = 60`, which is the
-ceiling on Vercel's Hobby plan. The research agent is the one that can approach
-it — it runs several web searches per request at `EFFORT.RESEARCH` (`high`). On Pro you
-can raise `maxDuration` to 300 in
-`src/app/api/documents/[id]/research/route.ts`; on Hobby, if searches get cut
-off, drop `EFFORT.RESEARCH` to `'medium'` or lower `WEB_SEARCH_TOOL.max_uses`
-in `src/lib/anthropic.ts`.
+**Function timeouts.** The AI routes set `maxDuration = 60`, the ceiling on
+Vercel's Hobby plan. The research agent is the one that approaches it, which is
+why it runs at `EFFORT.RESEARCH` (`low`) with the basic web-search tool and its
+own 50s deadline — see the note in `src/lib/anthropic.ts`. On Pro you can raise
+`maxDuration` to 300 in `src/app/api/documents/[id]/research/route.ts` and put
+all three back up.
 
 ## Reading Claude's replies
 
@@ -131,7 +130,8 @@ src/
   app/
     studio/page.tsx              the workspace (?doc=<id> opens a piece)
     login/page.tsx               the single-user sign-in
-    api/documents/[id]/...       draft, layout, goals, chat, pins, sources, ask, research
+    api/documents/[id]/...       draft, layout, goals, chat, pins, sources,
+                                 ask, research, versions, comments
   components/
     studio/StudioContext.tsx     shared client state for all panes
     studio/Workspace.tsx         dockview host + layout persistence
