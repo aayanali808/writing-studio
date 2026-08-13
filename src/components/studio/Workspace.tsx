@@ -62,13 +62,9 @@ function buildDefaultLayout(api: DockviewApi): void {
     position: { referencePanel: 'outline', direction: 'within' },
   });
 
-  api.addPanel({
-    id: 'comments',
-    component: 'comments',
-    title: PANE_TITLES.comments,
-    position: { referencePanel: 'chat', direction: 'within' },
-  });
-
+  // The right rail is everything that talks back. Order matters: a panel
+  // positioned `within` another must be added *after* it, or dockview throws
+  // on the missing reference and the rest of the layout never gets built.
   api.addPanel({
     id: 'chat',
     component: 'chat',
@@ -80,6 +76,13 @@ function buildDefaultLayout(api: DockviewApi): void {
     id: 'research',
     component: 'research',
     title: PANE_TITLES.research,
+    position: { referencePanel: 'chat', direction: 'within' },
+  });
+
+  api.addPanel({
+    id: 'comments',
+    component: 'comments',
+    title: PANE_TITLES.comments,
     position: { referencePanel: 'chat', direction: 'within' },
   });
 
@@ -167,7 +170,15 @@ export function Workspace({ initialContent }: { initialContent: DocNode }) {
         } catch {
           // Nothing to clear on a fresh grid.
         }
-        buildDefaultLayout(event.api);
+
+        try {
+          buildDefaultLayout(event.api);
+        } catch (error) {
+          // A half-built layout is survivable; a workspace stuck before
+          // `setReady` is not, because the Panes menu is disabled until then
+          // and there'd be no way to add the missing panes by hand.
+          console.error('[workspace] default layout failed', error);
+        }
       }
 
       restoringRef.current = false;
