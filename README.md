@@ -12,6 +12,8 @@ reopen — not a fixed three-column layout. The arrangement is saved per documen
 | --- | --- |
 | **Writing** | TipTap editor with autosave, a formatting bar, and typeface/size/measure controls. Highlight any passage for the floating ask toolbar. |
 | **Outline** | Live table of contents built from the draft's headings. Click one to jump to it. |
+| **Versions** | Restore points, taken automatically and before every AI edit you apply. |
+| **Comments** | Notes to yourself, anchored to a passage. No AI involved. |
 | **AI Chat** | Conversation about the piece. Every turn carries the Context Bundle. |
 | **Sources** | Read-only external material (Notion today), pinnable into the Context Bundle. |
 | **Goals** | Free-text goals for the piece — audience, argument, constraints, tone. |
@@ -71,9 +73,14 @@ npm run dev
 | `AUTH_USER_PASSWORD_HASH` | `npm run hash-password -- 'your-password'` |
 | `ANTHROPIC_API_KEY` | https://console.anthropic.com/settings/keys |
 | `NOTION_INTEGRATION_TOKEN` | Optional. https://www.notion.so/my-integrations — create an *internal* integration, then share the pages and databases you want visible with it. |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Optional. A service-account key file, pasted whole. Enable the Drive and Docs APIs, then share the folders you want with the account's `client_email`. Read-only. |
 
 There is no signup and no user table: the single account is defined entirely by
 those three `AUTH_*` variables.
+
+Both source providers use a machine identity you share files with rather than
+OAuth — no redirect URI, no consent screen, no refresh tokens to store. Each is
+inert until its variable is set, and the Sources pane says which are configured.
 
 ## Deploying to Vercel
 
@@ -128,15 +135,18 @@ src/
   components/
     studio/StudioContext.tsx     shared client state for all panes
     studio/Workspace.tsx         dockview host + layout persistence
-    panes/                       the six panes
+    panes/                       the eight panes
     editor/                      TipTap glue: selection, formatting bar, ask popover
     Markdown.tsx                 renders Claude's replies in the panes
   lib/
     context-bundle.ts            what Claude knows (see above)
     anthropic.ts                 model id + web search tool config
     markdown.ts                  Markdown → AST → React or TipTap
+    diff.ts                      word-level diff for rewrites
+    versions.ts                  draft snapshots and pruning
     turns.ts                     reads a conversation thread off a request
     sources/                     provider interface, registry, Postgres cache
+                                 (notion, drive, web)
     db.ts, documents.ts, tiptap.ts, client.ts, typography-store.ts
 ```
 
