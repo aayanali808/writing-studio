@@ -109,6 +109,16 @@ pane, because that is the one place that already knows when the document
 changed. `readOutline` runs in `onUpdate` *and* once when the editor mounts —
 without the second call a document opens with an empty Outline until you type.
 
+## Verified live
+
+Everything except Google Drive was clicked through on the deployed app on
+2026-08-12: headings and the Outline (including jump-to and active-section
+tracking), the font menu, focus mode, the document switcher, Markdown export,
+notes and their anchors, the ask thread with its diff and follow-up, version
+snapshot and restore, pinning a web page, and Claude answering from that pinned
+page with rendered Markdown. That pass found the dockview ordering bug fixed in
+`f14dc5d` — see the note about panel order in `buildDefaultLayout`.
+
 ## Known, not yet fixed
 
 - **The Google Drive provider has never run against a real account.** It needs
@@ -119,6 +129,15 @@ without the second call a document opens with an empty Outline until you type.
 - Adding a pane changes only the *default* layout. Documents with a saved
   layout won't show Outline, Versions, or Comments until you pick them from
   **Panes ▾** or reset the layout.
+- **The ask popover squeezes a narrow Writing pane.** It's a fixed `w-80`
+  sibling of the editor in a flex row, so in a ~400px pane the prose is left
+  with ~70px and wraps to one word per line. Capping it (`max-w-[55%]`) or
+  floating it over the editor would fix it. Seen during the live pass.
+- There is no way to delete a document from the UI. `DELETE /api/documents/[id]`
+  exists; the document menu doesn't call it.
+- Searching in the Sources pane *adds* matches to the cache rather than
+  filtering the list, so a new hit appears in title order rather than at the
+  top — easy to miss when the catalogue is long.
 - Insert-citation writes at the editor cursor, so it needs the Writing pane
   visible; by default it's tabbed with Research Results, which hides one behind
   the other.
