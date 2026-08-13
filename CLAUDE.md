@@ -125,6 +125,20 @@ snapshot and restore, pinning a web page, and Claude answering from that pinned
 page with rendered Markdown. That pass found the dockview ordering bug fixed in
 `f14dc5d` — see the note about panel order in `buildDefaultLayout`.
 
+A second pass on 2026-08-13 covered the three changes above. The ask popover
+was opened in a 294px Writing pane: it floated at 270px over the prose and the
+measure stayed at 294px, where the old layout would have left nothing. Deleting
+the piece you're on redirected to `/studio` and landed on the most recent
+survivor. The Sources filter narrowed 101 rows to 2 on "bank", reported "1 of
+101" with "IN CONTEXT · 1 OF 1" on a term matching a pinned page, matched a WEB
+source on "wikipedia.org" through its URL rather than its title, and said "0 of
+101 — press Search to look further" on a term with no hits.
+
+Note for driving this app with the Chrome extension: batch actions through
+`browser_batch`. Single `computer` calls against a backgrounded tab report
+success while the page never repaints, so clicks silently do nothing and
+screenshots time out. Batched calls keep the tab awake and behave.
+
 ## Known, not yet fixed
 
 - **The Google Drive provider has never run against a real account.** It needs
