@@ -81,6 +81,12 @@ rejects anything that isn't public http(s) — localhost, `.internal`, and the
 literal private and link-local ranges including 169.254.169.254. DNS names that
 resolve into those ranges are *not* caught; that needs address pinning.
 
+**The Sources search box filters locally and searches remotely.** Typing
+narrows the cached list on every keystroke; pressing Search *also* queries the
+providers, and whatever comes back lands inside the same filter. Search alone
+used to be the whole behaviour, and it read as broken — the hit was cached
+correctly but appeared somewhere in title order among everything else.
+
 **Typography is a localStorage preference, not document data.** It's how this
 screen should look, not a property of the piece, so it doesn't touch Postgres.
 It's a `useSyncExternalStore` source rather than state seeded from an effect,
@@ -129,15 +135,6 @@ page with rendered Markdown. That pass found the dockview ordering bug fixed in
 - Adding a pane changes only the *default* layout. Documents with a saved
   layout won't show Outline, Versions, or Comments until you pick them from
   **Panes ▾** or reset the layout.
-- **The ask popover squeezes a narrow Writing pane.** It's a fixed `w-80`
-  sibling of the editor in a flex row, so in a ~400px pane the prose is left
-  with ~70px and wraps to one word per line. Capping it (`max-w-[55%]`) or
-  floating it over the editor would fix it. Seen during the live pass.
-- There is no way to delete a document from the UI. `DELETE /api/documents/[id]`
-  exists; the document menu doesn't call it.
-- Searching in the Sources pane *adds* matches to the cache rather than
-  filtering the list, so a new hit appears in title order rather than at the
-  top — easy to miss when the catalogue is long.
 - Insert-citation writes at the editor cursor, so it needs the Writing pane
   visible; by default it's tabbed with Research Results, which hides one behind
   the other.

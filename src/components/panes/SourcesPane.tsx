@@ -10,6 +10,13 @@ import type { SourceWithPin } from '@/types';
  * Read-only external material, pinnable into the Context Bundle. Nothing here
  * knows about Notion specifically — it renders whatever the registered
  * SourceProviders have cached, tagged by provider.
+ *
+ * The search box narrows the list as you type. It used to only *add*: a search
+ * queried the providers, cached the hits, and returned the whole catalogue, so
+ * the thing you'd just searched for landed somewhere in title order among a
+ * hundred other rows and looked like nothing had happened. Filtering locally is
+ * instant and needs no round trip; pressing Search still asks the providers, so
+ * anything not cached yet arrives *into* the same filtered view.
  */
 export function SourcesPane() {
   const {
@@ -23,8 +30,23 @@ export function SourcesPane() {
 
   const [term, setTerm] = useState('');
 
-  const pinned = sources.filter((source) => source.pinned);
-  const available = sources.filter((source) => !source.pinned);
+  const query = term.trim().toLowerCase();
+  // The URL is matched too, so pasting one finds the page you already cached
+  // rather than offering to fetch it again — minus any fragment, since the web
+  // provider drops it before caching and a `#section` link would otherwise
+  // never match the page it points into.
+  const queryUrl = query.split('#')[0];
+  const matches = query
+    ? sources.filter(
+        (source) =>
+          source.title.toLowerCase().includes(query) ||
+          (source.url ?? '').toLowerCase().includes(queryUrl)
+      )
+    : sources;
+
+  const pinnedTotal = sources.filter((source) => source.pinned).length;
+  const pinned = matches.filter((source) => source.pinned);
+  const available = matches.filter((source) => !source.pinned);
   const unconfigured = providers.filter((provider) => !provider.configured);
 
   return (
@@ -40,17 +62,39 @@ export function SourcesPane() {
           <input
             value={term}
             onChange={(event) => setTerm(event.target.value)}
-            placeholder="Search, or sync everything…"
+            placeholder="Filter, or sync everything…"
             className="min-w-0 flex-1 rounded-md border border-[var(--border)] bg-[var(--bg-inset)] px-2.5 py-1.5 text-xs outline-none placeholder:text-[var(--text-faint)] focus:border-[var(--accent)]"
           />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setTerm('')}
+              aria-label="Clear filter"
+              className="shrink-0 rounded-md px-1.5 text-xs text-[var(--text-faint)] transition-colors hover:text-[var(--text)]"
+            >
+              ✕
+            </button>
+          ) : null}
           <button
             type="submit"
             disabled={sourcesBusy}
+            title={
+              query
+                ? 'Ask the providers for anything matching that isn’t cached yet'
+                : undefined
+            }
             className="shrink-0 rounded-md border border-[var(--border-strong)] px-2.5 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-inset)] hover:text-[var(--text)] disabled:opacity-40"
           >
-            {sourcesBusy ? '…' : term.trim() ? 'Search' : 'Sync'}
+            {sourcesBusy ? '…' : query ? 'Search' : 'Sync'}
           </button>
         </form>
+
+        {query ? (
+          <p className="mt-1.5 text-[10px] text-[var(--text-faint)]">
+            {matches.length} of {sources.length} cached
+            {matches.length === 0 ? ' — press Search to look further' : ''}
+          </p>
+        ) : null}
 
         {sourcesError ? (
           <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--danger)]">
@@ -69,7 +113,17 @@ export function SourcesPane() {
         ) : null}
 
         {pinned.length > 0 ? (
-          <Section label={`In context (${pinned.length})`}>
+          // While filtering, the count says how much of what's pinned you're
+          // looking at — pinned sources are hidden by a filter like any other,
+          // and silently showing "In context (1)" when three are pinned would
+          // misreport what Claude can actually see.
+          <Section
+            label={
+              query
+                ? `In context · ${pinned.length} of ${pinnedTotal}`
+                : `In context (${pinnedTotal})`
+            }
+          >
             {pinned.map((source) => (
               <SourceRow key={source.id} source={source} onToggle={togglePin} />
             ))}
