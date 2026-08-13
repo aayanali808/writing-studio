@@ -328,8 +328,11 @@ export function WritingPane({ initialContent }: { initialContent: DocNode }) {
   );
 
   return (
-    <div className="flex h-full">
-      <div className="flex min-w-0 flex-1 flex-col">
+    // `relative` so the ask popover can float over the pane. It's anchored
+    // here rather than inside the scroll container so it holds its position
+    // while the draft scrolls underneath it.
+    <div className="relative h-full">
+      <div className="flex h-full min-w-0 flex-col">
         <div className="border-b border-[var(--border)] px-8 pb-3 pt-4">
           <input
             value={title}

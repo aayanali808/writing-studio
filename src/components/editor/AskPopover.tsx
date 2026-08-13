@@ -22,12 +22,21 @@ export interface AskState {
 }
 
 /**
- * The side popover holding a highlight-to-ask thread.
+ * The floating popover holding a highlight-to-ask thread.
  *
  * It is a conversation, not a single answer: you can write back, and the reply
  * carries the whole thread plus the same Context Bundle. The apply actions at
  * the bottom always act on the *latest* answer, which is the one you would have
  * been reading when you decided to use it.
+ *
+ * It *floats* over the prose rather than sitting beside it. As a flex sibling of
+ * the editor it took a fixed 20rem out of the pane's width, which is survivable
+ * in a wide Writing pane and unusable in a narrow one — a 400px pane left the
+ * prose about 70px and roughly one word per line. Overlapping the text costs
+ * nothing by comparison, since you can't type while reading the answer anyway.
+ * It's anchored to the pane rather than to the selection so it stays put as the
+ * draft scrolls underneath, and capped at the pane width so it can never be the
+ * thing that overflows.
  */
 export function AskPopover({
   state,
@@ -119,7 +128,7 @@ export function AskPopover({
   };
 
   return (
-    <aside className="flex h-full w-80 shrink-0 flex-col border-l border-[var(--border)] bg-[var(--bg-raised)]">
+    <aside className="absolute right-3 top-3 z-40 flex max-h-[calc(100%-1.5rem)] w-80 max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--bg-raised)] shadow-2xl">
       <header className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
         <span className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">
           {state.label}
@@ -140,7 +149,9 @@ export function AskPopover({
         </p>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
+      {/* `min-h-0` is what lets the thread scroll inside the popover's
+          max-height instead of pushing the reply box and actions off it. */}
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
         {state.turns.map((turn, index) =>
           turn.role === 'user' ? (
             <p
